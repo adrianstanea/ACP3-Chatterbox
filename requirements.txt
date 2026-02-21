@@ -1,5 +1,4 @@
 chatterbox-tts
-espeak-phonemize
 librosa
 soundfile
 tensorboard
