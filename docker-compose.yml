@@ -13,6 +13,6 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              count: all
+              count: ${NUM_GPUS:-1}
               capabilities: [gpu]
     command: bash -c "pip install -r requirements.txt && bash"
