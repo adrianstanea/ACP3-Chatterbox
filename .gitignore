@@ -53,3 +53,9 @@ chatterbox_output/
 # Logs
 *.log
 tensorboard/
+
+# Certificates (NEVER COMMIT - contains sensitive certs)
+certs/
+*.crt
+*.pem
+*.key
