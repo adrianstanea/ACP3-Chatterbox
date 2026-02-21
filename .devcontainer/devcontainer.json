@@ -11,12 +11,78 @@
   "customizations": {
     "vscode": {
       "extensions": [
+        // Python Development
         "ms-python.python",
-        "ms-toolsai.jupyter"
+        "ms-python.vscode-pylance",
+        "ms-python.black-formatter",
+        "ms-python.isort",
+
+        // Data Science & ML
+        "ms-toolsai.jupyter",
+
+        // Docker & DevContainers
+        "ms-azuretools.vscode-docker",
+
+        // Git
+        "eamodio.gitlens",
+        "mhutchie.git-graph",
+
+        // Documentation
+        "yzhang.markdown-all-in-one",
+        "davidanson.vscode-markdownlint",
+
+        // YAML/JSON
+        "redhat.vscode-yaml",
+
+        // General Productivity
+        "visualstudioexptteam.vscodeintellicode",
+        "streetsidesoftware.code-spell-checker",
+        "gruntfuggly.todo-tree",
+        "usernamehw.errorlens",
+
+        // Code Quality
+        "ms-python.flake8"
       ],
       "settings": {
         "python.defaultInterpreterPath": "/usr/bin/python3",
-        "python.terminal.activateEnvironment": false
+        "python.terminal.activateEnvironment": false,
+
+        // Formatting
+        "editor.formatOnSave": true,
+        "python.formatting.provider": "none",
+        "[python]": {
+          "editor.defaultFormatter": "ms-python.black-formatter",
+          "editor.codeActionsOnSave": {
+            "source.organizeImports": "explicit"
+          }
+        },
+
+        // Linting
+        "python.linting.enabled": true,
+        "python.linting.flake8Enabled": true,
+        "python.linting.pylintEnabled": false,
+
+        // IntelliSense
+        "python.analysis.typeCheckingMode": "basic",
+        "python.analysis.autoImportCompletions": true,
+
+        // Jupyter
+        "jupyter.askForKernelRestart": false,
+
+        // Git
+        "git.autofetch": true,
+        "git.confirmSync": false,
+
+        // Files
+        "files.exclude": {
+          "**/__pycache__": true,
+          "**/*.pyc": true,
+          "**/.pytest_cache": true,
+          "**/.git": false
+        },
+
+        // Terminal
+        "terminal.integrated.defaultProfile.linux": "bash"
       }
     }
   },
