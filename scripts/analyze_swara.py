@@ -8,6 +8,7 @@ import argparse
 import csv
 import os
 import re
+import sys
 from collections import defaultdict, Counter
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -76,7 +77,6 @@ def analyze_dataset(metadata_path: str, audio_base_dir: str) -> None:
     sample_rates = []
     speaker_stats = defaultdict(lambda: {'count': 0, 'duration': 0.0})
     missing_files = []
-    all_text = []
     char_counter = Counter()
 
     # Read metadata
@@ -117,7 +117,6 @@ def analyze_dataset(metadata_path: str, audio_base_dir: str) -> None:
                 speaker_stats[speaker_id]['count'] += 1
                 speaker_stats[speaker_id]['duration'] += duration
 
-                all_text.append(text)
                 char_counter.update(text)
 
             except RuntimeError as e:
@@ -127,6 +126,13 @@ def analyze_dataset(metadata_path: str, audio_base_dir: str) -> None:
     # Convert to numpy arrays for analysis
     durations = np.array(durations)
     sample_rates = np.array(sample_rates)
+
+    # Check for empty dataset
+    if len(durations) == 0:
+        print("ERROR: No valid audio files were analyzed!")
+        print(f"Total entries in metadata: {total_entries}")
+        print(f"Missing files: {len(missing_files)}")
+        sys.exit(1)
 
     print("\n" + "="*80)
     print("OVERALL STATISTICS")
@@ -289,12 +295,9 @@ def analyze_dataset(metadata_path: str, audio_base_dir: str) -> None:
     all_chars = sorted(char_counter.keys())
     print(f"Characters ({len(all_chars)}):")
 
-    # Group by type
+    # Group by type (reuse earlier definitions)
     letters = [c for c in all_chars if c.isalpha()]
-    digits = [c for c in all_chars if c.isdigit()]
     spaces = [c for c in all_chars if c.isspace()]
-    punctuation = [c for c in all_chars
-                  if not c.isalnum() and not c.isspace()]
 
     print(f"\nLetters ({len(letters)}):")
     print(''.join(letters))
@@ -349,9 +352,9 @@ def main():
     )
     parser.add_argument(
         '--audio-dir',
-        default='/home/astanea/data/SWARA1.0_22k_noSil',
-        help='Base directory containing audio files '
-             '(default: /home/astanea/data/SWARA1.0_22k_noSil)'
+        default=os.getenv('SWARA_PATH', '/home/astanea/data/SWARA1.0_22k_noSil'),
+        help='Path to SWARA audio directory '
+             '(default: SWARA_PATH env variable or /home/astanea/data/SWARA1.0_22k_noSil)'
     )
 
     args = parser.parse_args()
