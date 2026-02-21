@@ -3,12 +3,24 @@
   "dockerComposeFile": "../docker-compose.yml",
   "service": "chatterbox",
   "workspaceFolder": "/workspace",
+
+  // Run setup after container creation
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+
+  // VS Code customizations
   "customizations": {
     "vscode": {
       "extensions": [
         "ms-python.python",
         "ms-toolsai.jupyter"
-      ]
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/bin/python3",
+        "python.terminal.activateEnvironment": false
+      }
     }
-  }
+  },
+
+  // Keep container running after creation
+  "shutdownAction": "stopCompose"
 }
