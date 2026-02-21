@@ -1,6 +1,8 @@
 services:
   chatterbox:
-    image: nvcr.io/nvidia/pytorch:26.01-py3
+    build:
+      context: .
+      dockerfile: Dockerfile
     volumes:
       - .:/workspace
       - ${SWARA_PATH}:/data/swara:ro
@@ -15,4 +17,5 @@ services:
             - driver: nvidia
               count: ${NUM_GPUS:-1}
               capabilities: [gpu]
-    command: bash -c "pip install -r requirements.txt && bash"
+    stdin_open: true
+    tty: true
