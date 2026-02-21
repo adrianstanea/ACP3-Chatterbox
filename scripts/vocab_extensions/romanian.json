@@ -1,0 +1,62 @@
+{
+  "language": "Romanian",
+  "language_code": "ro",
+  "description": "Romanian diacritics missing from base Chatterbox tokenizer",
+  "characters": [
+    {
+      "char": "ș",
+      "unicode": "U+0219",
+      "name": "Latin Small Letter S with Comma Below",
+      "frequency_rank": "high",
+      "notes": "Essential Romanian diacritic, ~1% of corpus"
+    },
+    {
+      "char": "ț",
+      "unicode": "U+021B",
+      "name": "Latin Small Letter T with Comma Below",
+      "frequency_rank": "high",
+      "notes": "Essential Romanian diacritic, ~1% of corpus"
+    },
+    {
+      "char": "Ș",
+      "unicode": "U+0218",
+      "name": "Latin Capital Letter S with Comma Below",
+      "frequency_rank": "medium",
+      "notes": "Uppercase variant, proper nouns and sentence starts"
+    },
+    {
+      "char": "Ț",
+      "unicode": "U+021A",
+      "name": "Latin Capital Letter T with Comma Below",
+      "frequency_rank": "low",
+      "notes": "Uppercase variant, rare in TTS datasets"
+    },
+    {
+      "char": "Ă",
+      "unicode": "U+0102",
+      "name": "Latin Capital Letter A with Breve",
+      "frequency_rank": "low",
+      "notes": "Uppercase variant, rare in TTS datasets"
+    }
+  ],
+  "validation": {
+    "expected_coverage": [
+      "ă", "â", "î", "ș", "ț",
+      "Ă", "Â", "Î", "Ș", "Ț"
+    ],
+    "test_phrases": [
+      "Bună ziua, ce mai faci?",
+      "Știință și înțelepciune.",
+      "Țara mea frumoasă."
+    ]
+  },
+  "metadata": {
+    "contributor": "Adrian Stanea",
+    "dataset": "SWARA 1.0",
+    "date": "2026-02-21",
+    "references": [
+      "https://en.wikipedia.org/wiki/Romanian_alphabet",
+      "SWARA dataset analysis (21,304 utterances)"
+    ]
+  }
+}
