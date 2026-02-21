@@ -1,8 +1,10 @@
 # Chatterbox Fine-Tuning Kit Analysis
 
-**Repository**: https://github.com/gokhaneraslan/chatterbox-finetuning
+**Upstream Repository**: https://github.com/gokhaneraslan/chatterbox-finetuning
+**Our Fork**: https://github.com/adrianstanea/chatterbox-finetuning
 **Author**: Gokhan Eraslan
-**Cloned to**: `vendor/chatterbox-finetuning/`
+**Submodule Path**: `vendor/chatterbox-finetuning/`
+**Pinned Version**: commit `18ffb2d` (added Voice Conditioning Dropout)
 **Analysis Date**: 2026-02-21
 
 ## Executive Summary
