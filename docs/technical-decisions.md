@@ -343,7 +343,11 @@ SWARA dataset has 21,304 utterances from 18 speakers. Need to split into trainin
 
 **Split Configuration:**
 1. **Holdout Speakers (Test):** BAS and SGS - 100% reserved for zero-shot evaluation
-2. **Training Speakers (16 remaining):** 90/10 per-speaker stratified train/validation split
+2. **Training Speakers (16 remaining):** ~~90/10 per-speaker stratified train/validation split~~ → **5 samples per speaker for validation (approved deviation)**
+
+**Decision Made:**
+- ~~10% validation split (90/10 ratio)~~ → **5 samples per speaker (80 samples total, ~0.5%)**
+- Approved deviation from original spec
 
 ### Rationale
 
@@ -372,17 +376,18 @@ SWARA dataset has 21,304 utterances from 18 speakers. Need to split into trainin
 - Enables in-speaker evaluation (known speakers)
 - Balanced validation across all training speakers
 
-**90/10 Ratio:**
+**5 Samples Per Speaker (Updated Decision):**
 
 **Rationale:**
-- Maximizes training data (important for neural TTS)
-- 10% validation sufficient for monitoring convergence
-- Standard practice in TTS literature
+- Small validation set sufficient for listening checks during training
+- Maximizes training data (18,740 samples vs ~16,866 with 10% split)
+- Academic research focus - comprehensive evaluation happens on held-out test set (BAS, SGS)
+- Faster validation loops during training
 
-**Expected Sizes:**
-- Training: ~17,000 utterances (19.5 hours)
-- Validation: ~1,900 utterances (2.2 hours)
-- Test (BAS + SGS): ~2,400 utterances (2.7 hours)
+**Impact:**
+- Training set: 18,740 samples (99.5% of non-holdout data)
+- Validation set: 80 samples (5 per speaker, stratified)
+- Test set: 2,484 samples (BAS and SGS, zero-shot evaluation)
 
 ### Alternatives Considered
 
