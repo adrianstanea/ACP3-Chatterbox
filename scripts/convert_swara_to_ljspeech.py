@@ -35,45 +35,60 @@ SWARA_PATH = os.getenv("SWARA_PATH", "/home/astanea/data/SWARA1.0_22k_noSil")
 METADATA_FILE = "metadata_SWARA1.0_text.csv"
 OUTPUT_DIR = Path("data/processed/MyTTSDataset")
 HOLDOUT_SPEAKERS = {"BAS", "SGS"}
-TRAIN_RATIO = 0.9
+VAL_SAMPLES_PER_SPEAKER = 5  # Small validation set for listening during training
 RANDOM_SEED = 42
 
 
-def normalize_text(text: str) -> str:
+def punc_norm(text: str) -> str:
     """
-    Romanian text normalization preserving diacritics.
+    Text normalization using Chatterbox's standard normalization.
 
-    Expands common abbreviations to full forms for better TTS synthesis.
-    Normalizes whitespace while preserving Romanian characters.
+    This function ensures consistency with the preprocessing pipeline
+    by applying the same normalization rules used during training.
+
+    Based on Chatterbox's punc_norm function from src/chatterbox_/tts.py
 
     Args:
-        text: Raw Romanian text with possible abbreviations
+        text: Raw text input
 
     Returns:
-        Normalized text with expanded abbreviations
+        Normalized text with cleaned punctuation
     """
-    # Common Romanian abbreviations
-    replacements = {
-        " str. ": " strada ",
-        " nr. ": " numărul ",
-        " bl. ": " blocul ",
-        " sc. ": " scara ",
-        " et. ": " etajul ",
-        " ap. ": " apartamentul ",
-        " jr. ": " juniorul ",
-        " dr. ": " doctor ",
-        " ing. ": " inginer ",
-        " prof. ": " profesor ",
-    }
+    if len(text) == 0:
+        return "You need to add some text for me to talk."
 
-    normalized = text
-    for old, new in replacements.items():
-        normalized = normalized.replace(old, new)
+    # Capitalize first letter
+    if text[0].islower():
+        text = text[0].upper() + text[1:]
 
-    # Normalize whitespace
-    normalized = " ".join(normalized.split())
+    # Remove multiple space chars
+    text = " ".join(text.split())
 
-    return normalized
+    # Replace uncommon/llm punctuation
+    punc_to_replace = [
+        ("...", ", "),
+        ("…", ", "),
+        (":", ","),
+        (" - ", ", "),
+        (";", ", "),
+        ("—", "-"),
+        ("–", "-"),
+        (" ,", ","),
+        (""", "\""),
+        (""", "\""),
+        ("'", "'"),
+        ("'", "'"),
+    ]
+    for old_char_sequence, new_char in punc_to_replace:
+        text = text.replace(old_char_sequence, new_char)
+
+    # Add full stop if no ending punctuation
+    text = text.rstrip(" ")
+    sentence_enders = {".", "!", "?", "-", ","}
+    if not any(text.endswith(p) for p in sentence_enders):
+        text += "."
+
+    return text
 
 
 def extract_speaker_prefix(filename: str) -> str:
@@ -149,8 +164,8 @@ def load_swara_metadata(
             filename = audio_path.name
             speaker = extract_speaker_prefix(filename)
 
-            # Normalize text
-            normalized = normalize_text(text)
+            # Normalize text using Chatterbox's punc_norm
+            normalized = punc_norm(text)
 
             sample = {
                 "filename": filename.replace(".wav", ""),  # Remove extension for LJSpeech format
@@ -209,16 +224,19 @@ def create_symlinks(samples: List[Dict], wavs_dir: Path) -> None:
 def split_samples(
     samples_by_speaker: Dict[str, List[Dict]],
     holdout_speakers: set,
-    train_ratio: float,
+    val_samples_per_speaker: int,
     random_seed: int
 ) -> Tuple[List[Dict], List[Dict], List[Dict]]:
     """
     Perform speaker-stratified train/val split with holdout speakers.
 
+    Validation set is intentionally small (5 samples per speaker) because
+    it's primarily used for listening during training, not for metrics.
+
     Args:
         samples_by_speaker: Samples organized by speaker
         holdout_speakers: Speakers to hold out for zero-shot testing
-        train_ratio: Ratio of samples for training (rest go to validation)
+        val_samples_per_speaker: Number of validation samples per speaker
         random_seed: Random seed for reproducibility
 
     Returns:
@@ -240,10 +258,10 @@ def split_samples(
             holdout_samples.extend(shuffled)
             print(f"Speaker {speaker}: {len(shuffled)} samples -> holdout")
         else:
-            # Split into train/val
-            split_idx = int(len(shuffled) * train_ratio)
-            train_speaker = shuffled[:split_idx]
-            val_speaker = shuffled[split_idx:]
+            # Take fixed number for validation, rest for training
+            val_count = min(val_samples_per_speaker, len(shuffled))
+            val_speaker = shuffled[:val_count]
+            train_speaker = shuffled[val_count:]
 
             train_samples.extend(train_speaker)
             val_samples.extend(val_speaker)
@@ -361,11 +379,11 @@ def main():
     print("=" * 60)
     print("SWARA to LJSpeech Conversion")
     print("=" * 60)
-    print(f"SWARA path:       {SWARA_PATH}")
-    print(f"Metadata file:    {METADATA_FILE}")
-    print(f"Output directory: {OUTPUT_DIR}")
-    print(f"Holdout speakers: {HOLDOUT_SPEAKERS}")
-    print(f"Train ratio:      {TRAIN_RATIO}")
+    print(f"SWARA path:            {SWARA_PATH}")
+    print(f"Metadata file:         {METADATA_FILE}")
+    print(f"Output directory:      {OUTPUT_DIR}")
+    print(f"Holdout speakers:      {HOLDOUT_SPEAKERS}")
+    print(f"Val samples/speaker:   {VAL_SAMPLES_PER_SPEAKER}")
     print("=" * 60)
 
     # Check if SWARA directory exists
@@ -399,7 +417,7 @@ def main():
     train_samples, val_samples, holdout_samples = split_samples(
         samples_by_speaker,
         HOLDOUT_SPEAKERS,
-        TRAIN_RATIO,
+        VAL_SAMPLES_PER_SPEAKER,
         RANDOM_SEED
     )
 
