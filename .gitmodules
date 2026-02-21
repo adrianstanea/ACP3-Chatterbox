@@ -1,0 +1,3 @@
+[submodule "vendor/chatterbox-finetuning"]
+	path = vendor/chatterbox-finetuning
+	url = https://github.com/adrianstanea/chatterbox-finetuning.git
