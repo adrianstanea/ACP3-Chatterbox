@@ -1,0 +1,8 @@
+chatterbox-tts
+espeak-phonemize
+librosa
+soundfile
+tensorboard
+jiwer
+pesq
+pystoi

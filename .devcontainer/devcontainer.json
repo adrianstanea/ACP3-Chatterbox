@@ -1,0 +1,14 @@
+{
+  "name": "Chatterbox Romanian",
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "chatterbox",
+  "workspaceFolder": "/workspace",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-toolsai.jupyter"
+      ]
+    }
+  }
+}

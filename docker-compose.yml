@@ -1,0 +1,18 @@
+services:
+  chatterbox:
+    image: nvcr.io/nvidia/pytorch:24.12-py3
+    volumes:
+      - .:/workspace
+      - ${SWARA_PATH}:/data/swara:ro
+      - ${OUTPUT_PATH}:/data/output
+    working_dir: /workspace
+    env_file: .env
+    shm_size: '16gb'
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    command: bash -c "pip install -r requirements.txt && bash"
