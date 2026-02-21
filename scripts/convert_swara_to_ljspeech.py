@@ -370,7 +370,7 @@ def validate_dataset(paths: Dict[str, Path]) -> None:
             print(f"  Example with diacritics: {sample_row[2][:60]}...")
         else:
             print(f"  Warning: First sample has no diacritics")
-
+    
     print("=" * 60)
 
 
