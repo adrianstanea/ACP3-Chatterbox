@@ -77,6 +77,12 @@ class RomanianTTSEngine:
         weights_path = self.checkpoint_dir / "model.safetensors"
         logger.info(f"Loading finetuned weights from {weights_path}")
         state_dict = load_file(str(weights_path), device="cpu")
+
+        # Strip "t3." prefix from keys if present (training saves with wrapper prefix)
+        if any(k.startswith("t3.") for k in state_dict.keys()):
+            logger.info("Stripping 't3.' prefix from checkpoint keys")
+            state_dict = {k.replace("t3.", "", 1): v for k, v in state_dict.items()}
+
         new_t3.load_state_dict(state_dict, strict=True)
         logger.info("Finetuned weights loaded successfully")
 
