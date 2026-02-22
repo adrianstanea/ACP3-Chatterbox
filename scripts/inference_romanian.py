@@ -326,8 +326,48 @@ def run_single_mode(engine: RomanianTTSEngine, args, gen_params: dict):
 
 def run_batch_mode(engine: RomanianTTSEngine, args, gen_params: dict):
     """Synthesize from a batch CSV file."""
-    logger.info("Batch mode not yet implemented")
-    sys.exit(1)
+    # Read batch file
+    rows = []
+    with open(args.batch, "r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+
+        # Validate columns
+        if "id" not in reader.fieldnames or "text" not in reader.fieldnames:
+            logger.error("Batch CSV must have 'id' and 'text' columns")
+            sys.exit(1)
+
+        for row in reader:
+            if row["text"].strip():  # Skip empty rows
+                rows.append(row)
+
+    logger.info(f"Loaded {len(rows)} utterances from {args.batch}")
+
+    # Create output directory
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Synthesize each row
+    failed = []
+    for row in tqdm(rows, desc="Synthesizing", unit="utterance"):
+        try:
+            wav = engine.synthesize(
+                text=row["text"],
+                reference_path=args.reference,
+                **gen_params,
+            )
+
+            output_path = args.output_dir / f"{row['id']}.wav"
+            sf.write(str(output_path), wav, engine.SAMPLE_RATE)
+
+        except Exception as e:
+            logger.error(f"Failed {row['id']}: {e}")
+            failed.append(row["id"])
+
+    # Summary
+    success_count = len(rows) - len(failed)
+    logger.info(f"Completed: {success_count}/{len(rows)}")
+
+    if failed:
+        logger.warning(f"Failed utterances: {failed}")
 
 
 if __name__ == "__main__":
