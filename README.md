@@ -280,6 +280,49 @@ python -c "import perth; import transformers; print('✓ OK')"
 - Check data loading: `dataloader_num_workers` (try 8, 16)
 - Enable mixed precision if available
 
+## Inference
+
+After training, generate Romanian speech using the inference script:
+
+### Single Text
+
+```bash
+python scripts/inference_romanian.py \
+    --text "Bună ziua, mă numesc Maria." \
+    --reference path/to/speaker.wav \
+    --output output.wav \
+    --checkpoint vendor/chatterbox-finetuning/chatterbox_output
+```
+
+### Batch Processing
+
+Create a CSV file with `id,text` columns:
+
+```csv
+id,text
+001,Prima propoziție.
+002,A doua propoziție.
+```
+
+Then run:
+
+```bash
+python scripts/inference_romanian.py \
+    --batch sentences.csv \
+    --reference speaker.wav \
+    --output-dir outputs/ \
+    --checkpoint vendor/chatterbox-finetuning/chatterbox_output
+```
+
+### Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--cfg-weight` | 0.5 | Classifier-free guidance (lower = faster speech) |
+| `--exaggeration` | 0.5 | Expressiveness (higher = more dramatic) |
+| `--temperature` | 0.8 | Sampling randomness |
+| `--seed` | None | Random seed for reproducibility |
+
 ## Quick Reference Commands
 
 ```bash

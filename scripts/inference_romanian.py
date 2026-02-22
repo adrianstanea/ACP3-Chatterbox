@@ -2,15 +2,35 @@
 """
 Romanian Chatterbox TTS Inference Script
 
-Synthesizes Romanian speech using the finetuned Chatterbox model.
-Supports single text and batch processing modes.
+Synthesizes Romanian speech using the finetuned Chatterbox model (checkpoint-5300).
+Applies automatic Romanian text preprocessing: ș→sh, ț→ts, keeps ă/â/î.
 
-Usage:
-    # Single text
-    python scripts/inference_romanian.py --text "Bună ziua" --reference ref.wav --output out.wav
+Examples:
+    # Single text synthesis
+    python scripts/inference_romanian.py \\
+        --text "Bună ziua, ce mai faci?" \\
+        --reference speaker.wav \\
+        --output output.wav
 
-    # Batch mode
-    python scripts/inference_romanian.py --batch input.csv --reference ref.wav --output-dir outputs/
+    # Batch synthesis from CSV
+    python scripts/inference_romanian.py \\
+        --batch sentences.csv \\
+        --reference speaker.wav \\
+        --output-dir outputs/
+
+    # With custom parameters
+    python scripts/inference_romanian.py \\
+        --text "Aceasta este un test." \\
+        --reference speaker.wav \\
+        --output output.wav \\
+        --cfg-weight 0.3 \\
+        --exaggeration 0.7 \\
+        --seed 42
+
+CSV format (batch mode):
+    id,text
+    001,Prima propoziție.
+    002,A doua propoziție.
 """
 
 import argparse
