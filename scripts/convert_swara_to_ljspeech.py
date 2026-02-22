@@ -57,36 +57,39 @@ def punc_norm(text: str) -> str:
     if len(text) == 0:
         return "You need to add some text for me to talk."
 
-    # Capitalize first letter
-    if text[0].islower():
-        text = text[0].upper() + text[1:]
+    # # Capitalize first letter
+    # if text[0].islower():
+    #     text = text[0].upper() + text[1:]
 
     # Remove multiple space chars
     text = " ".join(text.split())
 
     # Replace uncommon/llm punctuation
-    punc_to_replace = [
-        ("...", ", "),
-        ("…", ", "),
-        (":", ","),
-        (" - ", ", "),
-        (";", ", "),
-        ("—", "-"),
-        ("–", "-"),
-        (" ,", ","),
-        (""", "\""),
-        (""", "\""),
-        ("'", "'"),
-        ("'", "'"),
-    ]
-    for old_char_sequence, new_char in punc_to_replace:
-        text = text.replace(old_char_sequence, new_char)
+    # punc_to_replace = [
+    #     ("...", ", "),
+    #     ("…", ", "),
+    #     (":", ","),
+    #     (" - ", ", "),
+    #     (";", ", "),
+    #     ("—", "-"),
+    #     ("–", "-"),
+    #     (" ,", ","),
+    #     (""", "\""),
+    #     (""", "\""),
+    #     ("'", "'"),
+    #     ("'", "'"),
+    # ]
+    # for old_char_sequence, new_char in punc_to_replace:
+    #     text = text.replace(old_char_sequence, new_char)
 
     # Add full stop if no ending punctuation
     text = text.rstrip(" ")
     sentence_enders = {".", "!", "?", "-", ","}
     if not any(text.endswith(p) for p in sentence_enders):
         text += "."
+
+    # Convert to lowercase (Chatterbox is case-insensitive)
+    text = text.lower()
 
     return text
 

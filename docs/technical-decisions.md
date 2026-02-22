@@ -713,8 +713,195 @@ batch_size = config.batch_size // world_size
 | 2 | PyTorch 26.01 (Python 3.12) | 2026-02-21 | Final | Environment |
 | 3 | Git Submodule for vendor code | 2026-02-21 | Final | Code organization |
 | 4 | Per-speaker stratified split + holdout | 2026-02-21 | Final | Data preparation |
-| 5 | Chatterbox punc_norm for text | 2026-02-21 | Final | Text normalization |
+| 5 | Chatterbox punc_norm for text | 2026-02-21 | Superseded by #7 | Text normalization |
 | 6 | Single-GPU (multi-GPU deferred) | 2026-02-21 | Deferred | Training strategy |
+| 7 | Phoneme mapping over vocab extension | 2026-02-22 | Final | Tokenization strategy |
+
+---
+
+## Decision 7: Phoneme Mapping Over Vocabulary Extension
+
+**Date:** February 22, 2026
+**Status:** FINAL
+**Category:** Tokenization Strategy
+**Supersedes:** Decision 5 (Text Normalization — now uses Romanian-specific pipeline instead of plain `punc_norm`)
+
+### Context
+
+Our initial approach (Experiment 1) extended the Chatterbox tokenizer vocabulary from 2,454 to 2,459 tokens by adding 5 missing Romanian characters (`ș`, `ț`, `Ș`, `Ț`, `Ă`). After fine-tuning the T3 model on the SWARA dataset with this extended vocabulary, the model produced unintelligible speech — audio quality degraded severely after a few hundred training steps. This phenomenon is known in the literature as **posterior collapse** and was independently reported by multiple users of the same fine-tuning toolkit.
+
+### Problem Analysis: Why Vocabulary Extension Fails
+
+**Upstream Evidence (gokhaneraslan/chatterbox-finetuning):**
+
+| Issue | Language | Symptom | Root Cause |
+|-------|----------|---------|------------|
+| [#6](https://github.com/gokhaneraslan/chatterbox-finetuning/issues/6) | Turkish | Gibberish audio, "turbo-like" noise | Weak text embedding signal |
+| [#12](https://github.com/gokhaneraslan/chatterbox-finetuning/issues/12) | Norwegian, German | Reproduces reference audio instead of target text | Posterior collapse |
+| [#14](https://github.com/gokhaneraslan/chatterbox-finetuning/issues/14) | Arabic | Poor pronunciation quality | Character-level challenges |
+| [#8](https://github.com/gokhaneraslan/chatterbox-finetuning/issues/8) | Multi-language | General multilingual difficulties | Tokenizer limitations |
+
+**Structural Root Cause:**
+
+The T3 model has two critical text-dependent layers:
+
+1. **`text_emb` (Embedding Layer):** Maps token IDs → dense vectors
+2. **`text_head` (Output Head):** Maps dense vectors → token predictions
+
+When new tokens are added:
+- The pretrained weights cover IDs 0–2453 with well-trained, discriminative embeddings
+- New tokens (IDs 2454–2458) are initialized with the **mean of all existing embeddings**
+- This mean initialization produces a blurry, non-discriminative signal
+- The audio encoder (S3Gen) provides a much stronger signal than the weakly-initialized text tokens
+- The model learns to ignore the text entirely and collapses into an autoencoder that simply reconstructs the reference audio
+
+The upstream repository owner confirmed this on February 20, 2026: *"The new Weighted Text Embedding is too weak right now compared to the strong Audio Encoder"* (Issue #6, comment).
+
+### Decision
+
+**Chosen:** Phoneme-level text preprocessing that maps Romanian characters to existing vocabulary tokens, avoiding any vocabulary extension.
+
+**Key Change:**
+```
+Experiment 1:  vocab_size = 2459 (extended)  → unintelligible speech
+Experiment 2:  vocab_size = 2454 (original)  → preserves pretrained embedding quality
+```
+
+### Strategy: Two-Mode Preprocessing
+
+#### Mode 1: Phoneme Mapping (Recommended)
+
+For characters **not** in the base vocabulary, map to phonetically equivalent sequences that already have well-trained BPE tokens:
+
+| Romanian Char | Unicode | Mapping | Phonetic Basis | BPE Token ID |
+|--------------|---------|---------|----------------|--------------|
+| ș (s-comma) | U+0219 | → `sh` | Both represent /ʃ/ | ID 120 |
+| Ș | U+0218 | → `sh` | Uppercase variant | ID 120 |
+| ş (s-cedilla) | U+015F | → `sh` | Turkish variant, same sound | ID 120 |
+| ț (t-comma) | U+021B | → `ts` | Both represent /ts/ | ID 192 |
+| Ț | U+021A | → `ts` | Uppercase variant | ID 192 |
+| ţ (t-cedilla) | U+0163 | → `ts` | Older variant, same sound | ID 192 |
+
+For characters **already** in the vocabulary, retain them (no information loss):
+
+| Romanian Char | Unicode | Mapping | Existing Token ID |
+|--------------|---------|---------|-------------------|
+| ă | U+0103 | Kept as-is | ID 2413 |
+| â | U+00E2 | Kept as-is | ID 395 |
+| î | U+00EE | Kept as-is | ID 407 |
+| Ă → ă | U+0102 → U+0103 | Lowercase | ID 2413 |
+| Â → â | U+00C2 → U+00E2 | Lowercase | ID 395 |
+| Î → î | U+00CE → U+00EE | Lowercase | ID 407 |
+
+Additionally, all text is **lowercased** to reduce token diversity and aid model generalization.
+
+#### Mode 2: ASCII Mapping (Aggressive Fallback)
+
+Maps all diacritics to pure ASCII: `ă→a`, `â→a`, `î→i`, plus the consonant mappings. Maximizes compatibility but loses vowel distinctions.
+
+### Preprocessing Examples
+
+```
+Phoneme mode:
+  IN:  "Știință și înțelepciune."
+  OUT: "shtiintsă shi întselepciune."
+
+  IN:  "Țara mea frumoasă."
+  OUT: "tsara mea frumoasă."
+
+ASCII mode:
+  IN:  "Știință și înțelepciune."
+  OUT: "shtiintsa shi intselepciune."
+```
+
+### Rationale
+
+1. **No Vocabulary Extension Required:** Original embedding matrix (2,454 tokens) is used unchanged — every token has a well-trained, discriminative embedding from pretraining
+2. **Phonetically Accurate:** The mappings `ș→sh` and `ț→ts` are phonetically exact — the IPA transcriptions are identical (/ʃ/ and /ts/ respectively)
+3. **Preserves Vowel Information:** Unlike full ASCII mapping, the phoneme mode retains `ă`, `â`, `î` which have distinct sounds from `a` and `i` — these characters already exist in the vocabulary at well-trained positions
+4. **Handles Unicode Variants:** Romanian text may use either comma-below (ș U+0219) or cedilla (ş U+015F) forms — the preprocessor normalizes both
+5. **Empirically Motivated:** The upstream community confirmed that vocab extension causes structural failure, recommending the Standard (non-Turbo) model with existing vocabulary
+6. **Reversible and Inspectable:** The preprocessing is deterministic; original text is preserved in `metadata.csv` alongside the preprocessed `.pt` files
+
+### Alternatives Considered
+
+**Option A: Vocabulary Extension (Experiment 1)**
+- **Approach:** Add ș, ț, Ș, Ț, Ă to tokenizer (2454 → 2459); initialize new embeddings with mean
+- **Result:** Unintelligible speech after fine-tuning; model ignores text, collapses to reference audio reconstruction
+- **Root Cause:** Mean-initialized tokens create weak embedding signal compared to strong audio encoder
+- **Status:** **Rejected** — confirmed failure both experimentally and by upstream community
+
+**Option B: Multilingual Tokenizer (MTLTokenizer)**
+- **Approach:** Use the built-in `MTLTokenizer` class which supports language-specific processing and has a `[ro]` language tag (ID 726)
+- **Pros:** Official multilingual support, NFKD normalization, language-aware
+- **Cons:** Designed for standard Chatterbox inference, not the fine-tuning kit; would require significant changes to `preprocess_ljspeech.py` and `train.py`; may have its own vocab coverage issues
+- **Status:** **Not explored** — phoneme mapping is simpler and more compatible with existing fine-tuning pipeline
+
+**Option C: Training Only the Embedding Layer**
+- **Approach:** Freeze the T3 backbone, train only `text_emb` and `text_head` layers for the new tokens
+- **Pros:** Reduces risk of catastrophic forgetting
+- **Cons:** Still suffers from the weak initialization problem; upstream issue #6 specifically discusses this approach failing
+- **Status:** **Rejected** — does not address the fundamental signal imbalance
+
+**Option D: Full ASCII Transliteration**
+- **Approach:** Remove all diacritics (ă→a, â→a, î→i, ș→s, ț→t)
+- **Pros:** Maximum simplicity, all tokens guaranteed well-trained
+- **Cons:** Loses critical phonemic distinctions (şi "and" vs. si/zi; ţară "country" vs. tara; also vowel confusion between ă/a/â)
+- **Status:** **Rejected** — too much information loss for Romanian
+
+### Implementation
+
+**Files Created/Modified:**
+
+| File | Action | Purpose |
+|------|--------|---------|
+| `src/romanian_preprocessor.py` | **Created** | Core preprocessing module (334 lines) — mappings, normalization, CLI |
+| `src/config.py` | Modified | `romanian_preprocessing=True`, `romanian_mode="phoneme"`, `new_vocab_size=2454` |
+| `src/preprocess_ljspeech.py` | Modified | Uses `ro_preprocess()` instead of `punc_norm()` during tokenization |
+| `inference.py` | Modified | Applies Romanian preprocessing before synthesis |
+| `src/inference_callback.py` | Modified | Applies Romanian preprocessing during training checkpoint inference |
+| `.devcontainer/post-create.sh` | Modified | Removed vocab extension step; verifies original tokenizer (2454 tokens) |
+
+**Configuration:**
+```python
+# src/config.py
+romanian_preprocessing: bool = True   # Enable Romanian text preprocessing
+romanian_mode: str = "phoneme"        # "phoneme" (ș→sh, keep ă/â/î) or "ascii" (all→ASCII)
+new_vocab_size: int = 2454            # Original — no extension
+```
+
+**Preprocessing Pipeline:**
+```
+metadata.csv (Romanian text with diacritics)
+  → ro_preprocess() maps ș→sh, ț→ts, lowercases
+  → EnTokenizer.text_to_tokens() encodes with BPE (2454 vocab)
+  → .pt files saved with token IDs all < 2454
+```
+
+### Verification
+
+**Token ID validation** (21,304 files, all pass):
+```
+Max text token ID across dataset: 2413 (ă, ID 2413)
+Vocab size: 2454
+Out-of-vocab tokens: 0
+```
+
+**Preprocessor output examples verified in Docker container:**
+```
+IN:  "De asemenea, contează și dacă imobilul este la stradă sau nu."
+OUT: "de asemenea, contează shi dacă imobilul este la stradă sau nu."
+
+IN:  "Înțelepciunea înseamnă să știi că și cea mai întunecată noapte..."
+OUT: "întselepciunea înseamnă să shtii că shi cea mai întunecată noapte..."
+```
+
+### References
+
+- gokhaneraslan/chatterbox-finetuning Issues: [#6](https://github.com/gokhaneraslan/chatterbox-finetuning/issues/6), [#8](https://github.com/gokhaneraslan/chatterbox-finetuning/issues/8), [#12](https://github.com/gokhaneraslan/chatterbox-finetuning/issues/12), [#14](https://github.com/gokhaneraslan/chatterbox-finetuning/issues/14)
+- stlohrey/chatterbox-finetuning: Alternative fine-tuning repo (fork of resemble-ai/chatterbox)
+- Tokenizer vocabulary: `grapheme_mtl_merged_expanded_v1.json` (2,454 tokens, HuggingFace)
+- Implementation: `vendor/chatterbox-finetuning/src/romanian_preprocessor.py`
 
 ---
 
@@ -743,9 +930,7 @@ Each decision includes:
 
 **Pending Decisions:**
 
-1. **Tokenizer Extension:**
-   - Status: Awaiting verification of Romanian diacritics
-   - Decision point: After tokenizer inspection (Task 5)
+1. ~~**Tokenizer Extension:**~~ → **Resolved by Decision 7** (phoneme mapping, no extension)
 
 2. **Hyperparameter Tuning:**
    - Status: Using defaults from fine-tuning kit

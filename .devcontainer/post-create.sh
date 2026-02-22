@@ -39,7 +39,7 @@ echo ""
 echo "[2b/6] Installing workspace dependencies..."
 if [ -f requirements.txt ]; then
     # Install remaining dependencies (jiwer, pesq, pystoi for evaluation)
-    pip install --no-cache-dir jiwer pesq pystoi
+    pip install --no-cache-dir -r /workspace/requirements.txt
     echo "✓ Workspace dependencies installed"
 else
     echo "⚠ requirements.txt not found, skipping"
@@ -80,14 +80,24 @@ if [ -d vendor/chatterbox-finetuning ]; then
         echo "✓ Pretrained models already present"
     fi
 
-    # Extend tokenizer for Romanian
+    # Restore original tokenizer if previously extended (Romanian preprocessing
+    # replaces vocab extension — see src/romanian_preprocessor.py)
     echo ""
-    echo "[4b/6] Extending tokenizer for Romanian..."
-    if [ -f scripts/extend_tokenizer.py ]; then
-        python scripts/extend_tokenizer.py --language romanian
-        echo "✓ Tokenizer extended for Romanian (2454 → 2459 tokens)"
+    echo "[4b/6] Verifying original tokenizer (no vocab extension needed)..."
+    TOKENIZER_PATH="vendor/chatterbox-finetuning/pretrained_models/tokenizer.json"
+    if [ -f "$TOKENIZER_PATH" ]; then
+        VOCAB_SIZE=$(python -c "import json; d=json.load(open('$TOKENIZER_PATH')); print(len(d['model']['vocab']))")
+        if [ "$VOCAB_SIZE" -gt 2454 ]; then
+            echo "⚠ Tokenizer has $VOCAB_SIZE tokens (extended). Restoring original (2454)..."
+            TOKENIZER_URL="https://huggingface.co/ResembleAI/chatterbox/resolve/main/grapheme_mtl_merged_expanded_v1.json"
+            curl -sL "$TOKENIZER_URL" -o "$TOKENIZER_PATH"
+            NEW_SIZE=$(python -c "import json; d=json.load(open('$TOKENIZER_PATH')); print(len(d['model']['vocab']))")
+            echo "✓ Tokenizer restored to $NEW_SIZE tokens (original)"
+        else
+            echo "✓ Tokenizer is original ($VOCAB_SIZE tokens) — no extension needed"
+        fi
     else
-        echo "⚠ Tokenizer extension script not found"
+        echo "⚠ Tokenizer not found (will be downloaded by setup.py)"
     fi
 else
     echo "⚠ Vendor directory not found, skipping"
@@ -118,8 +128,7 @@ echo "✓ Post-create setup complete!"
 echo "========================================"
 echo ""
 echo "Next steps:"
-echo "  1. Verify tokenizer: python scripts/verify_tokenizer.py \\"
-echo "       vendor/chatterbox-finetuning/pretrained_models/tokenizer.json \\"
-echo "       data/processed/MyTTSDataset/metadata.csv"
-echo "  2. Start training: cd vendor/chatterbox-finetuning && python train.py"
+echo "  1. Verify preprocessing: cd vendor/chatterbox-finetuning && python -m src.romanian_preprocessor demo"
+echo "  2. Start training (first run with preprocess=True in config.py):"
+echo "     cd vendor/chatterbox-finetuning && python train.py 2>&1 | tee training.log"
 echo ""

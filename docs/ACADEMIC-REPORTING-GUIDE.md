@@ -11,9 +11,9 @@ This guide helps you quickly find the information needed for academic papers, pr
 ## For Abstract/Executive Summary
 
 **One-Paragraph Summary:**
-> This project adapts the Chatterbox text-to-speech model to Romanian by fine-tuning the 500M parameter multilingual variant on the SWARA 1.0 dataset (21,304 utterances, 18 speakers, 21.67 hours). Using a Llama 3-based transformer with character-level tokenization, we enable high-quality Romanian speech synthesis with zero-shot voice cloning capabilities. The model is trained using per-speaker stratified validation with holdout speakers for robust evaluation.
+> This project adapts the Chatterbox text-to-speech model to Romanian by fine-tuning the 500M parameter multilingual variant on the SWARA 1.0 dataset (21,304 utterances, 18 speakers, 21.67 hours). An initial experiment extending the tokenizer vocabulary with 5 Romanian-specific characters (2,454 → 2,459 tokens) resulted in posterior collapse — the model produced unintelligible speech due to weak mean-initialized embeddings being overwhelmed by the strong audio encoder. This failure, independently corroborated by upstream community reports for Turkish, Norwegian, German, and Arabic, motivated a second approach: phoneme-level text preprocessing that maps missing Romanian characters to phonetically equivalent sequences already in the vocabulary (ș→"sh", ț→"ts") while retaining characters with existing embeddings (ă, â, î). This avoids vocabulary extension entirely, preserving the full quality of pretrained embeddings.
 
-**Source:** [Project Overview](project-overview.md#executive-summary)
+**Source:** [Project Overview](project-overview.md#executive-summary), [Tokenization Experiments](TOKENIZATION-EXPERIMENTS.md)
 
 ## Dataset Statistics
 
@@ -89,6 +89,76 @@ Test (BAS, SGS holdout) & 2,400 & 2.7 \\
 **Source:** [SWARA Analysis Report](data/swara-analysis-report.md#romanian-diacritics)
 
 ## Model Architecture
+
+### Tokenization Experiments Table
+
+```latex
+\begin{table}[h]
+\centering
+\begin{tabular}{lll}
+\hline
+\textbf{Aspect} & \textbf{Exp.~1: Vocab Extension} & \textbf{Exp.~2: Phoneme Mapping} \\
+\hline
+Vocabulary size & 2{,}459 (+5 tokens) & 2{,}454 (original) \\
+\c{s} (s-comma) handling & New token (ID 2454) & $\rightarrow$ ``sh'' (ID 120) \\
+\c{t} (t-comma) handling & New token (ID 2455) & $\rightarrow$ ``ts'' (ID 192) \\
+ă, â, î handling & Already in vocab & Already in vocab \\
+Embedding init & Mean of existing (weak) & Pretrained (strong) \\
+Audio quality & Unintelligible & Pending evaluation \\
+Posterior collapse & Yes & Not observed \\
+\hline
+\end{tabular}
+\caption{Comparison of Tokenization Strategies for Romanian Adaptation}
+\label{tab:tokenization-experiments}
+\end{table}
+```
+
+**Source:** [Tokenization Experiments Report](TOKENIZATION-EXPERIMENTS.md)
+
+### Phoneme Mapping Table
+
+```latex
+\begin{table}[h]
+\centering
+\begin{tabular}{clllc}
+\hline
+\textbf{Character} & \textbf{Unicode} & \textbf{IPA} & \textbf{Mapping} & \textbf{BPE ID} \\
+\hline
+\c{s} & U+0219 & /\textipa{S}/ & $\rightarrow$ ``sh'' & 120 \\
+\c{t} & U+021B & /ts/ & $\rightarrow$ ``ts'' & 192 \\
+ă & U+0103 & /\textipa{@}/ & Kept (in vocab) & 2413 \\
+â & U+00E2 & /\textipa{1}/ & Kept (in vocab) & 395 \\
+î & U+00EE & /\textipa{1}/ & Kept (in vocab) & 407 \\
+\hline
+\end{tabular}
+\caption{Romanian Character to Existing Token Mapping (Phoneme Mode)}
+\label{tab:phoneme-mapping}
+\end{table}
+```
+
+**Source:** [Tokenization Experiments Report §3.2](TOKENIZATION-EXPERIMENTS.md#32-approach)
+
+### Upstream Community Reports Table
+
+```latex
+\begin{table}[h]
+\centering
+\begin{tabular}{clll}
+\hline
+\textbf{Issue} & \textbf{Language} & \textbf{Symptom} & \textbf{Root Cause} \\
+\hline
+\#6 & Turkish & Gibberish audio & Weak text embedding \\
+\#12 & Norwegian, German & Reference audio reproduction & Posterior collapse \\
+\#14 & Arabic & Poor pronunciation & Character coverage \\
+\#8 & Multiple & General degradation & Tokenizer limits \\
+\hline
+\end{tabular}
+\caption{Upstream Reports of Vocabulary Extension Failures (gokhaneraslan/chatterbox-finetuning)}
+\label{tab:upstream-issues}
+\end{table}
+```
+
+**Source:** [Technical Decisions \#7](technical-decisions.md#decision-7-phoneme-mapping-over-vocabulary-extension)
 
 ### Architecture Comparison Table
 

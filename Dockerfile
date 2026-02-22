@@ -6,11 +6,12 @@
 FROM nvcr.io/nvidia/pytorch:24.11-py3
 
 # Handle CA certificates (optional - build succeeds without certs/)
-COPY cert[s]/ /tmp/certs/
-RUN if [ -f /tmp/certs/nscacert_combined.crt ]; then \
-    cp /tmp/certs/nscacert_combined.crt /usr/local/share/ca-certificates/nscacert_combined.crt && \
-    update-ca-certificates; \
-    fi
+# COPY cert[s]/ /tmp/certs/
+# RUN if [ -f /tmp/certs/nscacert_combined.crt ]; then \
+#     cp /tmp/certs/nscacert_combined.crt /usr/local/share/ca-certificates/nscacert_combined.crt && \
+#     update-ca-certificates; \
+#     fi
+ENV DEBIAN_FRONTEND=noninteractive
 
 # Install system dependencies only
 # These rarely change and should be baked into the image

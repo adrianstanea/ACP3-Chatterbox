@@ -18,6 +18,15 @@ This project aims to create the first open-source, neural TTS model for Romanian
 - Proper pronunciation of Romanian diacritics (ă, â, î, ș, ț)
 - Natural prosody and intonation
 
+### Key Innovation: Phoneme-Level Preprocessing
+
+An initial experiment extending the tokenizer vocabulary with new Romanian characters resulted in **posterior collapse** — the model produced unintelligible speech (see [Tokenization Experiments](TOKENIZATION-EXPERIMENTS.md)). This failure was independently corroborated by upstream community reports for Turkish, Norwegian, German, and Arabic.
+
+Our current approach uses **phoneme-level text preprocessing** instead of vocabulary extension:
+- Characters missing from the vocabulary (ș, ț) are mapped to phonetically equivalent existing tokens (`sh`, `ts`)
+- Characters already in the vocabulary (ă, â, î) are kept unchanged
+- This preserves pretrained embedding quality and avoids the weak-signal posterior collapse
+
 ## Architecture Overview
 
 ### Base Model: Chatterbox Multilingual
@@ -48,9 +57,10 @@ The Multilingual model already handles 23 languages with cross-lingual transfer,
 - S3Gen Vocoder: **Frozen** (pretrained speech generation)
 
 **Key Innovation:**
-- Mean initialization for new vocabulary tokens
-- Offline preprocessing for training speed
-- Vocabulary extension for Romanian diacritics
+- Phoneme-level text preprocessing maps missing Romanian characters to existing vocabulary tokens (ș→"sh", ț→"ts")
+- Original vocabulary size (2,454) preserved — no extension needed
+- Avoids posterior collapse caused by weak mean-initialized embeddings
+- See [Tokenization Experiments](TOKENIZATION-EXPERIMENTS.md) and [Technical Decision #7](technical-decisions.md#decision-7-phoneme-mapping-over-vocabulary-extension)
 
 ## Dataset
 
