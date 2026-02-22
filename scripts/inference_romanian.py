@@ -261,6 +261,16 @@ def validate_args(args):
         sys.exit(1)
 
 
+def set_seed(seed: int):
+    """Set random seeds for reproducibility."""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    logger.info(f"Random seed set to {seed}")
+
+
 def main():
     args = parse_args()
 
@@ -269,14 +279,55 @@ def main():
 
     validate_args(args)
 
-    logger.info("Arguments validated successfully")
-    logger.info(f"Mode: {'single' if args.text else 'batch'}")
-    logger.info(f"Reference: {args.reference}")
-    logger.info(f"Checkpoint: {args.checkpoint}")
-    logger.info(f"Parameters: cfg_weight={args.cfg_weight}, exaggeration={args.exaggeration}")
+    # Set seed if provided
+    if args.seed is not None:
+        set_seed(args.seed)
 
-    # TODO: Load model and synthesize
-    logger.info("Model loading not yet implemented")
+    # Initialize engine
+    engine = RomanianTTSEngine(
+        checkpoint_dir=args.checkpoint,
+        pretrained_dir=args.pretrained_dir,
+        device="cuda",
+    )
+    engine.load_model()
+
+    # Generation parameters
+    gen_params = {
+        "cfg_weight": args.cfg_weight,
+        "exaggeration": args.exaggeration,
+        "temperature": args.temperature,
+    }
+
+    if args.text:
+        # Single text mode
+        run_single_mode(engine, args, gen_params)
+    else:
+        # Batch mode
+        run_batch_mode(engine, args, gen_params)
+
+
+def run_single_mode(engine: RomanianTTSEngine, args, gen_params: dict):
+    """Synthesize a single text."""
+    logger.info(f"Synthesizing: {args.text[:50]}{'...' if len(args.text) > 50 else ''}")
+
+    wav = engine.synthesize(
+        text=args.text,
+        reference_path=args.reference,
+        **gen_params,
+    )
+
+    # Save output
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    sf.write(str(args.output), wav, engine.SAMPLE_RATE)
+
+    duration = len(wav) / engine.SAMPLE_RATE
+    logger.info(f"Saved {duration:.2f}s audio to {args.output}")
+
+
+def run_batch_mode(engine: RomanianTTSEngine, args, gen_params: dict):
+    """Synthesize from a batch CSV file."""
+    logger.info("Batch mode not yet implemented")
+    sys.exit(1)
 
 
 if __name__ == "__main__":
