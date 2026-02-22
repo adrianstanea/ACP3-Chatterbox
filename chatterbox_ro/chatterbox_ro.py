@@ -12,7 +12,7 @@ Key features:
 - HuggingFace-style API with from_local() and from_pretrained()
 
 Usage:
-    from src import ChatterboxRomanian
+    from chatterbox_ro import ChatterboxRomanian
 
     model = ChatterboxRomanian.from_local(
         checkpoint_dir="/path/to/finetuned/checkpoint-1000",
@@ -41,13 +41,14 @@ VENDOR_PATH = Path(__file__).parent.parent / "vendor" / "chatterbox-finetuning"
 if str(VENDOR_PATH) not in sys.path:
     sys.path.insert(0, str(VENDOR_PATH))
 
-from src.romanian_preprocessor import preprocess_and_normalize
+# Import from vendor (no naming conflict since our package is chatterbox_ro, not src)
 from src.chatterbox_.tts import ChatterboxTTS
 from src.chatterbox_.models.t3.t3 import T3
 from src.chatterbox_.models.t3.modules.t3_config import T3Config
 from src.chatterbox_.models.voice_encoder import VoiceEncoder
 from src.chatterbox_.models.s3gen import S3Gen
 from src.chatterbox_.models.tokenizers import EnTokenizer
+from src.romanian_preprocessor import preprocess_and_normalize
 
 
 class ChatterboxRomanian:

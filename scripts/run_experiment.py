@@ -51,7 +51,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from tqdm import tqdm
 
-from src.chatterbox_ro import ChatterboxRomanian
+from chatterbox_ro import ChatterboxRomanian
 
 # Default parameter grid
 DEFAULT_SPEAKERS = ["bas", "sgs"]
