@@ -24,6 +24,7 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 import torch
+import torchaudio
 from safetensors.torch import load_file
 from tqdm import tqdm
 
@@ -126,6 +127,25 @@ class RomanianTTSEngine:
         """
         if self.engine is None:
             raise RuntimeError("Model not loaded. Call load_model() first.")
+
+        # Warn if text is very long
+        MAX_CHARS = 500  # Approximate limit before quality degrades
+        if len(text) > MAX_CHARS:
+            logger.warning(
+                f"Text is {len(text)} chars (>{MAX_CHARS}). "
+                "Consider splitting into sentences for better quality."
+            )
+
+        # Validate reference audio duration
+        try:
+            info = torchaudio.info(str(reference_path))
+            duration_sec = info.num_frames / info.sample_rate
+            if duration_sec < 1.0:
+                logger.warning(f"Reference audio is only {duration_sec:.1f}s (recommend 3-10s)")
+            elif duration_sec > 15.0:
+                logger.warning(f"Reference audio is {duration_sec:.1f}s (recommend 3-10s, may slow generation)")
+        except Exception as e:
+            logger.warning(f"Could not validate reference audio: {e}")
 
         # Preprocess Romanian text
         processed_text = self.preprocess_text(text)
