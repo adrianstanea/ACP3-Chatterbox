@@ -58,6 +58,13 @@ def parse_args() -> argparse.Namespace:
         default=10,
         help="Maximum number of samples per condition to include",
     )
+    parser.add_argument(
+        "--selected-samples",
+        type=Path,
+        default=None,
+        help="Path to selected_samples.json from select_best_samples.py. "
+             "When provided, only these best samples are included in the gallery.",
+    )
 
     return parser.parse_args()
 
@@ -459,6 +466,52 @@ def load_filelist(experiment_dir: Path, condition: str) -> List[Tuple[str, str]]
     return samples
 
 
+def load_selected_samples(selected_path: Path) -> Optional[Dict[str, List[Dict]]]:
+    """Load selected samples from select_best_samples.py output."""
+    if not selected_path.exists():
+        return None
+
+    with open(selected_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    return data.get("selected", None)
+
+
+def get_samples_for_condition(
+    experiment_dir: Path,
+    condition: str,
+    selected_samples: Optional[Dict[str, List[Dict]]],
+    max_samples: int,
+) -> List[Tuple[str, str, Optional[Dict]]]:
+    """
+    Get samples for a condition, optionally filtering to selected best samples.
+
+    Returns list of (sample_id, transcript, metrics_dict) tuples.
+    """
+    if selected_samples and condition in selected_samples:
+        # Use pre-selected best samples
+        samples_data = selected_samples[condition]
+        samples = []
+        for s in samples_data[:max_samples]:
+            audio_file = s.get("audio_file", "")
+            # Remove .wav extension for sample_id if present
+            sample_id = audio_file.replace(".wav", "") if audio_file.endswith(".wav") else audio_file
+            transcript = s.get("original_transcription", "")
+            metrics = {k: v for k, v in s.items() if k not in ["audio_file", "original_transcription", "synthesized_transcription"]}
+            samples.append((sample_id, transcript, metrics))
+        return samples
+    else:
+        # Fall back to filelist
+        raw_samples = load_filelist(experiment_dir, condition)
+        samples = []
+        for sample_id, transcript in raw_samples[:max_samples]:
+            # Remove .wav extension if present
+            if sample_id.endswith(".wav"):
+                sample_id = sample_id[:-4]
+            samples.append((sample_id, transcript, None))
+        return samples
+
+
 # ==============================================================================
 # Page Generators
 # ==============================================================================
@@ -622,6 +675,7 @@ def generate_condition_page(
     output_dir: Path,
     condition: str,
     max_samples: int,
+    selected_samples: Optional[Dict[str, List[Dict]]] = None,
 ) -> Tuple[str, int]:
     """
     Generate a condition page with audio samples.
@@ -630,11 +684,7 @@ def generate_condition_page(
         Tuple of (html_content, number_of_samples_copied)
     """
     params = parse_condition_name(condition)
-    samples = load_filelist(experiment_dir, condition)
-
-    # Limit samples
-    if len(samples) > max_samples:
-        samples = samples[:max_samples]
+    samples = get_samples_for_condition(experiment_dir, condition, selected_samples, max_samples)
 
     html_parts = [
         html_head(f"Condition: {condition}"),
@@ -668,7 +718,7 @@ def generate_condition_page(
     samples_copied = 0
     condition_audio_dir = experiment_dir / condition
 
-    for sample_id, transcript in samples:
+    for sample_id, transcript, metrics in samples:
         audio_src = condition_audio_dir / f"{sample_id}.wav"
         audio_dest = audio_out_dir / f"{sample_id}.wav"
         audio_href = f"audio/{condition}/{sample_id}.wav"
@@ -684,6 +734,19 @@ def generate_condition_page(
         html_parts.append('<div class="sample">')
         html_parts.append('<div class="sample-header">')
         html_parts.append(f'<span class="sample-id">{html.escape(sample_id)}</span>')
+
+        # Display metrics if available (from selected samples)
+        if metrics:
+            metrics_str = []
+            if "UTMOS_Synthesized" in metrics:
+                metrics_str.append(f"UTMOS: {metrics['UTMOS_Synthesized']:.2f}")
+            if "CER" in metrics:
+                metrics_str.append(f"CER: {metrics['CER']:.3f}")
+            if "Speaker_Cosine_Similarity" in metrics:
+                metrics_str.append(f"Spk: {metrics['Speaker_Cosine_Similarity']:.2f}")
+            if metrics_str:
+                html_parts.append(f'<span class="sample-metrics" style="color: var(--color-text-muted); font-size: 0.8rem;">{" | ".join(metrics_str)}</span>')
+
         html_parts.append("</div>")
         html_parts.append(f'<div class="sample-text">{html.escape(transcript)}</div>')
 
@@ -722,6 +785,16 @@ def main() -> int:
     print(f"Experiment: {experiment_dir}")
     print(f"Output: {output_dir}")
     print(f"Max samples per condition: {args.max_samples}")
+
+    # Load selected samples if provided
+    selected_samples = None
+    if args.selected_samples:
+        selected_samples = load_selected_samples(args.selected_samples)
+        if selected_samples:
+            total_selected = sum(len(v) for v in selected_samples.values())
+            print(f"Using selected samples: {total_selected} samples from {len(selected_samples)} conditions")
+        else:
+            print(f"Warning: Could not load selected samples from {args.selected_samples}")
 
     # Create output directory
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -769,7 +842,7 @@ def main() -> int:
     total_audio_copied = 0
     for condition in conditions:
         condition_html, n_copied = generate_condition_page(
-            experiment_dir, output_dir, condition, args.max_samples
+            experiment_dir, output_dir, condition, args.max_samples, selected_samples
         )
         condition_path = output_dir / f"{condition}.html"
         with open(condition_path, "w", encoding="utf-8") as f:
