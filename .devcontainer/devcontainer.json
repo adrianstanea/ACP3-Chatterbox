@@ -4,10 +4,8 @@
   "service": "chatterbox",
   "workspaceFolder": "/workspace",
 
-  // Run setup after container creation
   "postCreateCommand": "bash .devcontainer/post-create.sh",
 
-  // VS Code customizations
   "customizations": {
     "vscode": {
       "extensions": [
@@ -87,6 +85,5 @@
     }
   },
 
-  // Keep container running after creation
   "shutdownAction": "stopCompose"
 }

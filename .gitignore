@@ -57,7 +57,7 @@ chatterbox_output/
 *.log
 tensorboard/
 
-# Certificates (NEVER COMMIT - contains sensitive certs)
+# Certificates
 certs/
 *.crt
 *.pem
@@ -65,3 +65,7 @@ certs/
 
 experiments
 outputs
+
+docs/*.html
+docs/*.css
+docs/**/*.wav

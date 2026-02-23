@@ -47,9 +47,11 @@ def parse_args() -> argparse.Namespace:
 Examples:
   %(prog)s --experiment-dir ./experiments/exp001
   %(prog)s --experiment-dir ./experiments/exp001 --output ./results.csv
+  %(prog)s --experiment-dir ./experiments/exp001 --stats-only
 
-Expected input format (pipe-delimited CSV):
-  Audio_File|Original_Transcription|Synthesized_Transcription|CER|WER|...
+The --stats-only flag is useful for recomputing statistics after filtering invalid data:
+  1. Manually edit metric CSVs to remove invalid rows
+  2. Run with --stats-only to regenerate results_summary.csv
         '''
     )
 
@@ -66,6 +68,12 @@ Expected input format (pipe-delimited CSV):
         default=None,
         help='Output CSV path (default: experiment-dir/results_summary.csv)'
     )
+    
+    parser.add_argument(
+        '--stats-only',
+        action='store_true',
+        help='Only compute statistics from existing metrics (skip if you just need to recalculate aggregates)'
+    )
 
     return parser.parse_args()
 
@@ -73,6 +81,9 @@ Expected input format (pipe-delimited CSV):
 def read_metrics_csv(csv_path: Path) -> List[Dict[str, float]]:
     """
     Read a metrics CSV file and extract numeric values.
+    
+    Skips rows that contain 'nan' string values in any metric column,
+    ensuring that incomplete rows don't propagate NaN to summary statistics.
 
     Args:
         csv_path: Path to the metrics CSV file
@@ -81,6 +92,7 @@ def read_metrics_csv(csv_path: Path) -> List[Dict[str, float]]:
         List of dictionaries with metric values per sample
     """
     samples = []
+    skipped_rows = 0
 
     with open(csv_path, 'r', encoding='utf-8') as f:
         reader = csv.DictReader(f, delimiter='|')
@@ -94,6 +106,17 @@ def read_metrics_csv(csv_path: Path) -> List[Dict[str, float]]:
             print(f"WARNING: Missing columns in {csv_path}: {missing_cols}")
 
         for row in reader:
+            # Skip rows with 'nan' string values in any metric
+            has_nan = False
+            for metric in METRICS_TO_AGGREGATE:
+                if metric in row and str(row[metric]).lower().strip() == 'nan':
+                    has_nan = True
+                    skipped_rows += 1
+                    break
+            
+            if has_nan:
+                continue
+            
             sample_metrics = {}
             for metric in METRICS_TO_AGGREGATE:
                 if metric in row:
@@ -101,11 +124,18 @@ def read_metrics_csv(csv_path: Path) -> List[Dict[str, float]]:
                         value = float(row[metric])
                         sample_metrics[metric] = value
                     except (ValueError, TypeError):
-                        # Skip non-numeric values
-                        pass
+                        # Skip rows with non-numeric non-nan values
+                        has_nan = True
+                        break
 
-            if sample_metrics:
+            if not has_nan and sample_metrics:
                 samples.append(sample_metrics)
+            elif not sample_metrics:
+                # Row had no valid metrics at all
+                skipped_rows += 1
+
+    if skipped_rows > 0:
+        print(f"  Skipped {skipped_rows} rows with invalid/NaN metric values")
 
     return samples
 
@@ -126,10 +156,17 @@ def compute_statistics(samples: List[Dict[str, float]]) -> Dict[str, Tuple[float
         values = [s[metric] for s in samples if metric in s]
 
         if values:
-            mean_val = np.mean(values)
-            std_val = np.std(values)
-            stats[metric] = (mean_val, std_val)
+            # Filter out any NaN values that may have slipped through
+            valid_values = [v for v in values if not np.isnan(v)]
+            if valid_values:
+                mean_val = np.mean(valid_values)
+                std_val = np.std(valid_values)
+                stats[metric] = (mean_val, std_val)
+            else:
+                print(f"WARNING: No valid values for {metric} (all NaN)")
+                stats[metric] = (float('nan'), float('nan'))
         else:
+            print(f"WARNING: No values found for {metric}")
             stats[metric] = (float('nan'), float('nan'))
 
     return stats
@@ -247,6 +284,8 @@ def main() -> int:
 
     print(f"Experiment directory: {experiment_dir}")
     print(f"Output file: {output_path}")
+    if args.stats_only:
+        print("Mode: Statistics only (recomputing from existing metrics)")
     print()
 
     try:

@@ -2,17 +2,40 @@
 """
 Compute metrics for Romanian Chatterbox experiment.
 
-Standalone script that computes all objective metrics for synthesized samples:
-- CER/WER: Character/Word Error Rate (via Whisper transcription)
-- UTMOS: Speech quality (MOS predictor)
-- MCD: Mel Cepstral Distortion
-- Log F0 RMSE: Prosody similarity
-- Speaker Similarity: Cosine similarity of speaker embeddings
+Splits computation into two resource-intensive steps:
+
+1. TRANSCRIPTION STEP (GPU-intensive):
+   - Transcribes original audio with Whisper
+   - Transcribes synthesized audio with Whisper
+   - Saves transcriptions to transcriptions/{condition}.csv
+
+2. METRICS STEP (CPU-intensive):
+   - Computes CER/WER from transcriptions
+   - Computes UTMOS: Speech quality (MOS predictor)
+   - Computes MCD: Mel Cepstral Distortion
+   - Computes Log F0 RMSE: Prosody similarity
+   - Computes Speaker Similarity: Cosine similarity of embeddings
+   - Saves metrics to metrics/{condition}.csv
 
 Usage:
+    # Step 1: Transcribe only (can be run on GPU machine)
     python scripts/compute_experiment_metrics.py \
         --experiment-dir experiments/2026-02-22 \
         --swara-dir /data/swara \
+        --step transcribe \
+        --whisper-model medium
+
+    # Step 2: Compute metrics (can be run separately, on CPU or GPU)
+    python scripts/compute_experiment_metrics.py \
+        --experiment-dir experiments/2026-02-22 \
+        --swara-dir /data/swara \
+        --step compute-metrics
+
+    # Or run both steps together (default)
+    python scripts/compute_experiment_metrics.py \
+        --experiment-dir experiments/2026-02-22 \
+        --swara-dir /data/swara \
+        --step all \
         --whisper-model medium
 """
 
@@ -54,6 +77,13 @@ def parse_args() -> argparse.Namespace:
         help="Path to SWARA dataset (original audio files)",
     )
     parser.add_argument(
+        "--step",
+        type=str,
+        default="all",
+        choices=["transcribe", "compute-metrics", "all"],
+        help="Which step to run: 'transcribe' (Whisper only), 'compute-metrics' (metrics from transcriptions), or 'all' (both)",
+    )
+    parser.add_argument(
         "--whisper-model",
         type=str,
         default="medium",
@@ -63,7 +93,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--skip-existing",
         action="store_true",
-        help="Skip conditions that already have metrics computed",
+        help="Skip conditions that already have results computed",
     )
     parser.add_argument(
         "--condition",
@@ -88,14 +118,17 @@ class MetricsComputer:
         from resemblyzer import VoiceEncoder, preprocess_wav
         import jiwer
 
-        # Add path to DiscreteSpeechMetrics if needed
-        pipeline_dir = Path("/home/astanea/git-repos/adrianstanea/OpenTTS/TTS-Evaluation-Pipeline")
-        if pipeline_dir.exists():
-            sys.path.insert(0, str(pipeline_dir))
-            from DiscreteSpeechMetrics.discrete_speech_metrics.mcd import MCD
+        # Try to import MCD from discrete_speech_metrics
+        # (already installed by post-create.sh in the container)
+        try:
+            from discrete_speech_metrics import MCD
             self.mcd_scorer = MCD(sr=self.SR)
-        else:
-            logger.warning("DiscreteSpeechMetrics not found, MCD will be unavailable")
+            logger.info("MCD scorer initialized")
+        except ImportError:
+            logger.warning("MCD not available - discrete-speech-metrics installation incomplete")
+            self.mcd_scorer = None
+        except Exception as e:
+            logger.warning(f"Failed to initialize MCD: {e}")
             self.mcd_scorer = None
 
         # Initialize Whisper
@@ -126,7 +159,7 @@ class MetricsComputer:
         import re
         from num2words import num2words
 
-        chars_to_ignore = r'[,?.!\-\;\:\""%\'"\u2014\u2018\u2026\u2013\u201E]'
+        chars_to_ignore = r'[,?.!\\-\;\\:\\""%\'\"\\u2014\\u2018\\u2026\\u2013\\u201E]'
 
         # Convert % to "procente"
         text = text.replace("%", " procente")
@@ -141,7 +174,7 @@ class MetricsComputer:
             except Exception:
                 return match.group()
 
-        text = re.sub(r"\b\d+\b", replace_number, text)
+        text = re.sub(r"\\b\\d+\\b", replace_number, text)
 
         # Normalize whitespace
         text = " ".join(text.split())
@@ -162,6 +195,10 @@ class MetricsComputer:
 
     def compute_utmos(self, wav: np.ndarray) -> float:
         """Compute UTMOS quality score."""
+        if len(wav) == 0:
+            raise ValueError("Audio is empty")
+        if np.all(wav == 0):
+            raise ValueError("Audio is silent (all zeros)")
         return float(self.utmos.score(wav))
 
     def compute_f0_rmse(self, wav_ref: np.ndarray, wav_synth: np.ndarray) -> float:
@@ -189,77 +226,6 @@ class MetricsComputer:
         """Load and preprocess audio for metrics."""
         return self.preprocess_wav(path, source_sr=self.SR)
 
-    def compute_all_metrics(
-        self,
-        synth_path: Path,
-        orig_path: Path,
-        reference_text: str,
-    ) -> Dict[str, float]:
-        """
-        Compute all metrics for a single sample.
-
-        Returns dict with keys:
-            - CER, WER
-            - UTMOS_Original, UTMOS_Synthesized
-            - Log_F0_RMSE, MCD, Speaker_Cosine_Similarity
-        """
-        results = {}
-
-        # Load audio
-        try:
-            wav_synth = self.load_wav(synth_path)
-            wav_orig = self.load_wav(orig_path)
-        except Exception as e:
-            logger.error(f"Failed to load audio: {e}")
-            return {}
-
-        # Transcription and text metrics
-        try:
-            synth_transcription = self.transcribe(synth_path)
-            results["Synthesized_Transcription"] = synth_transcription
-            results["CER"] = self.compute_cer(reference_text, synth_transcription)
-            results["WER"] = self.compute_wer(reference_text, synth_transcription)
-        except Exception as e:
-            logger.warning(f"Transcription failed: {e}")
-            results["Synthesized_Transcription"] = ""
-            results["CER"] = 1.0
-            results["WER"] = 1.0
-
-        # Quality metrics
-        try:
-            results["UTMOS_Original"] = self.compute_utmos(wav_orig)
-            results["UTMOS_Synthesized"] = self.compute_utmos(wav_synth)
-        except Exception as e:
-            logger.warning(f"UTMOS failed: {e}")
-            results["UTMOS_Original"] = 0.0
-            results["UTMOS_Synthesized"] = 0.0
-
-        # Prosody metrics
-        try:
-            results["Log_F0_RMSE"] = self.compute_f0_rmse(wav_orig, wav_synth)
-        except Exception as e:
-            logger.warning(f"F0 RMSE failed: {e}")
-            results["Log_F0_RMSE"] = float("nan")
-
-        # MCD
-        try:
-            mcd = self.compute_mcd(wav_orig, wav_synth)
-            results["MCD"] = mcd if mcd is not None else float("nan")
-        except Exception as e:
-            logger.warning(f"MCD failed: {e}")
-            results["MCD"] = float("nan")
-
-        # Speaker similarity
-        try:
-            results["Speaker_Cosine_Similarity"] = self.compute_speaker_similarity(
-                wav_orig, wav_synth
-            )
-        except Exception as e:
-            logger.warning(f"Speaker similarity failed: {e}")
-            results["Speaker_Cosine_Similarity"] = 0.0
-
-        return results
-
 
 def load_filelist(csv_path: Path) -> List[Tuple[str, str]]:
     """Load filelist (sample_id|text format)."""
@@ -277,20 +243,21 @@ def load_filelist(csv_path: Path) -> List[Tuple[str, str]]:
     return samples
 
 
-def process_condition(
+def process_condition_transcribe(
     computer: MetricsComputer,
     condition: str,
     experiment_dir: Path,
     swara_dir: Path,
 ) -> Optional[Path]:
     """
-    Process all samples for a single condition.
+    Transcribe original and synthesized audio for all samples in a condition.
+    Saves transcriptions to transcriptions/{condition}.csv
 
-    Returns path to output metrics CSV.
+    Returns path to output transcriptions CSV.
     """
     condition_dir = experiment_dir / condition
     filelist_path = experiment_dir / "filelists" / f"{condition}.csv"
-    output_dir = experiment_dir / "metrics"
+    output_dir = experiment_dir / "transcriptions"
     output_path = output_dir / f"{condition}.csv"
 
     if not filelist_path.exists():
@@ -309,20 +276,13 @@ def process_condition(
         logger.error(f"No samples in filelist: {filelist_path}")
         return None
 
-    logger.info(f"Processing {len(samples)} samples for {condition}")
+    logger.info(f"Transcribing {len(samples)} samples for {condition}")
 
-    # CSV header
+    # CSV header for transcriptions
     header = [
         "Audio_File",
         "Original_Transcription",
         "Synthesized_Transcription",
-        "CER",
-        "WER",
-        "UTMOS_Original",
-        "UTMOS_Synthesized",
-        "Log_F0_RMSE",
-        "MCD",
-        "Speaker_Cosine_Similarity",
     ]
 
     # Process samples
@@ -342,23 +302,20 @@ def process_condition(
             logger.warning(f"Original audio not found: {orig_path}")
             continue
 
-        # Compute metrics
-        metrics = computer.compute_all_metrics(synth_path, orig_path, reference_text)
+        # Transcribe both audio files
+        try:
+            orig_transcription = computer.transcribe(orig_path)
+            synth_transcription = computer.transcribe(synth_path)
 
-        if metrics:
             row = [
                 sample_id,
-                reference_text,
-                metrics.get("Synthesized_Transcription", ""),
-                metrics.get("CER", ""),
-                metrics.get("WER", ""),
-                metrics.get("UTMOS_Original", ""),
-                metrics.get("UTMOS_Synthesized", ""),
-                metrics.get("Log_F0_RMSE", ""),
-                metrics.get("MCD", ""),
-                metrics.get("Speaker_Cosine_Similarity", ""),
+                orig_transcription,
+                synth_transcription,
             ]
             results_rows.append(row)
+        except Exception as e:
+            logger.warning(f"Transcription failed for {sample_id}: {e}")
+            continue
 
     # Write results
     if results_rows:
@@ -367,7 +324,185 @@ def process_condition(
             writer.writerow(header)
             writer.writerows(results_rows)
 
-        logger.info(f"Saved {len(results_rows)} results to {output_path}")
+        logger.info(f"Saved {len(results_rows)} transcriptions to {output_path}")
+        return output_path
+
+    return None
+
+
+def process_condition_metrics(
+    computer: MetricsComputer,
+    condition: str,
+    experiment_dir: Path,
+    swara_dir: Path,
+) -> Optional[Path]:
+    """
+    Compute metrics from pre-computed transcriptions.
+    Reads from transcriptions/{condition}.csv
+    Writes to metrics/{condition}.csv
+
+    Returns path to output metrics CSV.
+    """
+    condition_dir = experiment_dir / condition
+    transcriptions_path = experiment_dir / "transcriptions" / f"{condition}.csv"
+    output_dir = experiment_dir / "metrics"
+    output_path = output_dir / f"{condition}.csv"
+
+    if not transcriptions_path.exists():
+        logger.error(f"Transcriptions file not found: {transcriptions_path}")
+        return None
+
+    if not condition_dir.exists():
+        logger.error(f"Condition directory not found: {condition_dir}")
+        return None
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Load transcriptions
+    transcriptions = {}
+    with open(transcriptions_path, "r", encoding="utf-8") as f:
+        reader = csv.DictReader(f, delimiter="|")
+        for row in reader:
+            transcriptions[row["Audio_File"]] = {
+                "Original_Transcription": row["Original_Transcription"],
+                "Synthesized_Transcription": row["Synthesized_Transcription"],
+            }
+
+    if not transcriptions:
+        logger.error(f"No transcriptions found in {transcriptions_path}")
+        return None
+
+    logger.info(f"Computing metrics for {len(transcriptions)} samples in {condition}")
+
+    # CSV header
+    header = [
+        "Audio_File",
+        "Original_Transcription",
+        "Synthesized_Transcription",
+        "CER",
+        "WER",
+        "UTMOS_Original",
+        "UTMOS_Synthesized",
+        "Log_F0_RMSE",
+        "MCD",
+        "Speaker_Cosine_Similarity",
+    ]
+
+    # Process samples
+    from tqdm import tqdm
+
+    results_rows = []
+    skipped_samples = []
+
+    for sample_id in tqdm(transcriptions.keys(), desc=condition):
+        synth_path = condition_dir / sample_id
+        orig_path = swara_dir / sample_id
+
+        if not synth_path.exists():
+            logger.warning(f"Synthesized audio not found: {synth_path}")
+            skipped_samples.append(sample_id)
+            continue
+
+        if not orig_path.exists():
+            logger.warning(f"Original audio not found: {orig_path}")
+            skipped_samples.append(sample_id)
+            continue
+
+        # Load audio and compute metrics
+        try:
+            wav_synth = computer.load_wav(synth_path)
+            wav_orig = computer.load_wav(orig_path)
+        except Exception as e:
+            logger.error(f"Failed to load audio for {sample_id}: {e}")
+            skipped_samples.append(sample_id)
+            continue
+
+        # Get transcriptions
+        trans = transcriptions[sample_id]
+        orig_transcription = trans["Original_Transcription"]
+        synth_transcription = trans["Synthesized_Transcription"]
+
+        # Compute CER/WER
+        try:
+            cer = computer.compute_cer(orig_transcription, synth_transcription)
+            wer = computer.compute_wer(orig_transcription, synth_transcription)
+        except Exception as e:
+            logger.warning(f"CER/WER failed for {sample_id}: {e}")
+            cer = 1.0
+            wer = 1.0
+
+        # Quality metrics
+        try:
+            utmos_orig = computer.compute_utmos(wav_orig)
+            utmos_synth = computer.compute_utmos(wav_synth)
+        except Exception as e:
+            logger.warning(f"UTMOS failed for {sample_id}: {e}")
+            utmos_orig = float("nan")
+            utmos_synth = float("nan")
+
+        # Prosody metrics
+        try:
+            log_f0_rmse = computer.compute_f0_rmse(wav_orig, wav_synth)
+        except Exception as e:
+            logger.warning(f"F0 RMSE failed for {sample_id}: {e}")
+            log_f0_rmse = float("nan")
+
+        # MCD
+        try:
+            mcd = computer.compute_mcd(wav_orig, wav_synth)
+            mcd = mcd if mcd is not None else float("nan")
+        except Exception as e:
+            logger.warning(f"MCD failed for {sample_id}: {e}")
+            mcd = float("nan")
+
+        # Speaker similarity
+        try:
+            speaker_sim = computer.compute_speaker_similarity(wav_orig, wav_synth)
+        except Exception as e:
+            logger.warning(f"Speaker similarity failed for {sample_id}: {e}")
+            speaker_sim = float("nan")
+
+        row = [
+            sample_id,
+            orig_transcription,
+            synth_transcription,
+            cer,
+            wer,
+            utmos_orig,
+            utmos_synth,
+            log_f0_rmse,
+            mcd,
+            speaker_sim,
+        ]
+
+        # Data cleaning: skip rows with any NaN or invalid values in numeric metrics
+        has_invalid = False
+        for metric_value in [cer, wer, utmos_orig, utmos_synth, log_f0_rmse, mcd, speaker_sim]:
+            try:
+                if np.isnan(metric_value):
+                    has_invalid = True
+                    break
+            except (TypeError, ValueError):
+                has_invalid = True
+                break
+
+        if has_invalid:
+            logger.warning(f"Dropping {sample_id}: contains NaN or invalid metric values")
+            skipped_samples.append(sample_id)
+            continue
+
+        results_rows.append(row)
+
+    # Write results
+    if results_rows:
+        with open(output_path, "w", encoding="utf-8", newline="") as f:
+            writer = csv.writer(f, delimiter="|")
+            writer.writerow(header)
+            writer.writerows(results_rows)
+
+        logger.info(f"Saved {len(results_rows)} metrics to {output_path}")
+        if skipped_samples:
+            logger.info(f"Skipped {len(skipped_samples)} samples due to invalid data: {skipped_samples[:5]}{'...' if len(skipped_samples) > 5 else ''}")
         return output_path
 
     return None
@@ -413,19 +548,32 @@ def main():
 
     logger.info(f"Found {len(conditions)} conditions: {conditions}")
 
-    # Check for existing metrics
+    # Check for existing results
     if args.skip_existing:
-        metrics_dir = args.experiment_dir / "metrics"
-        conditions = [
-            c for c in conditions
-            if not (metrics_dir / f"{c}.csv").exists()
-        ]
-        if not conditions:
-            logger.info("All conditions already processed")
-            sys.exit(0)
-        logger.info(f"Processing {len(conditions)} remaining conditions")
+        if args.step in ["transcribe", "all"]:
+            transcriptions_dir = args.experiment_dir / "transcriptions"
+            conditions = [
+                c for c in conditions
+                if not (transcriptions_dir / f"{c}.csv").exists()
+            ]
+            if not conditions:
+                logger.info("All conditions already transcribed")
+                return
 
-    # Initialize metrics computer
+        if args.step in ["compute-metrics", "all"]:
+            metrics_dir = args.experiment_dir / "metrics"
+            conditions = [
+                c for c in conditions
+                if not (metrics_dir / f"{c}.csv").exists()
+            ]
+            if not conditions:
+                logger.info("All metrics already computed")
+                return
+
+        if conditions:
+            logger.info(f"Processing {len(conditions)} remaining conditions")
+
+    # Initialize metrics computer (may not need all models for transcription-only)
     computer = MetricsComputer(whisper_model=args.whisper_model)
 
     # Process each condition
@@ -438,12 +586,36 @@ def main():
         logger.info(f"{'='*60}")
 
         try:
-            result = process_condition(
-                computer=computer,
-                condition=condition,
-                experiment_dir=args.experiment_dir,
-                swara_dir=args.swara_dir,
-            )
+            if args.step == "transcribe":
+                result = process_condition_transcribe(
+                    computer=computer,
+                    condition=condition,
+                    experiment_dir=args.experiment_dir,
+                    swara_dir=args.swara_dir,
+                )
+            elif args.step == "compute-metrics":
+                result = process_condition_metrics(
+                    computer=computer,
+                    condition=condition,
+                    experiment_dir=args.experiment_dir,
+                    swara_dir=args.swara_dir,
+                )
+            else:  # "all"
+                # Run transcription first
+                trans_result = process_condition_transcribe(
+                    computer=computer,
+                    condition=condition,
+                    experiment_dir=args.experiment_dir,
+                    swara_dir=args.swara_dir,
+                )
+                # Then compute metrics
+                result = process_condition_metrics(
+                    computer=computer,
+                    condition=condition,
+                    experiment_dir=args.experiment_dir,
+                    swara_dir=args.swara_dir,
+                ) if trans_result else None
+
             if result:
                 processed += 1
             else:
@@ -456,12 +628,14 @@ def main():
     logger.info(f"\n{'='*60}")
     logger.info("SUMMARY")
     logger.info(f"{'='*60}")
+    logger.info(f"Step: {args.step}")
     logger.info(f"Processed: {processed} conditions")
     logger.info(f"Failed: {failed} conditions")
-    logger.info(f"Metrics saved to: {args.experiment_dir / 'metrics'}")
 
-    # Run aggregation
-    if processed > 0:
+    if args.step in ["compute-metrics", "all"]:
+        logger.info(f"Metrics saved to: {args.experiment_dir / 'metrics'}")
+
+        # Run aggregation only if metrics were computed
         logger.info("\nRunning metrics aggregation...")
         import subprocess
 
@@ -476,6 +650,8 @@ def main():
                 logger.info("Aggregation complete")
             else:
                 logger.warning(f"Aggregation failed: {result.stderr}")
+    else:
+        logger.info(f"Transcriptions saved to: {args.experiment_dir / 'transcriptions'}")
 
 
 if __name__ == "__main__":

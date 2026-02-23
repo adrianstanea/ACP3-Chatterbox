@@ -25,7 +25,7 @@ Usage:
         reference_audio="/path/to/reference.wav"
     )
 
-Author: Adrian Stanea / ACP3
+Author: Adrian Stanea
 License: Apache 2.0
 """
 
@@ -36,12 +36,10 @@ from typing import Optional, Union
 import torch
 from safetensors.torch import load_file
 
-# Add vendor path for chatterbox imports
 VENDOR_PATH = Path(__file__).parent.parent / "vendor" / "chatterbox-finetuning"
 if str(VENDOR_PATH) not in sys.path:
     sys.path.insert(0, str(VENDOR_PATH))
 
-# Import from vendor (no naming conflict since our package is chatterbox_ro, not src)
 from src.chatterbox_.tts import ChatterboxTTS
 from src.chatterbox_.models.t3.t3 import T3
 from src.chatterbox_.models.t3.modules.t3_config import T3Config
@@ -53,8 +51,6 @@ from src.romanian_preprocessor import preprocess_and_normalize
 
 class ChatterboxRomanian:
     """
-    HuggingFace-compatible Romanian TTS class.
-
     Wraps ChatterboxTTS with Romanian-specific preprocessing and
     fine-tuned T3 model loading.
 
@@ -63,8 +59,8 @@ class ChatterboxRomanian:
         SAMPLE_RATE: Output audio sample rate (24000 Hz)
     """
 
-    VOCAB_SIZE = 2454  # Original multilingual vocab, no extension
-    SAMPLE_RATE = 24000  # S3Gen output sample rate
+    VOCAB_SIZE = 2454
+    SAMPLE_RATE = 24000
 
     def __init__(self, engine: ChatterboxTTS):
         """
@@ -131,10 +127,6 @@ class ChatterboxRomanian:
         else:
             map_location = None
 
-        # ─────────────────────────────────────────────────────────────────
-        # Load pretrained components from pretrained_dir
-        # ─────────────────────────────────────────────────────────────────
-
         # VoiceEncoder
         ve_path = pretrained_dir / "ve.safetensors"
         if not ve_path.exists():
@@ -157,10 +149,7 @@ class ChatterboxRomanian:
             raise FileNotFoundError(f"Tokenizer not found: {tokenizer_path}")
         tokenizer = EnTokenizer(str(tokenizer_path))
 
-        # ─────────────────────────────────────────────────────────────────
-        # Create T3 with multilingual config and load fine-tuned weights
-        # ─────────────────────────────────────────────────────────────────
-
+        # Multilingual T3 with original vocab size
         t3_config = T3Config.multilingual()
         t3_config.text_tokens_dict_size = cls.VOCAB_SIZE
         t3 = T3(hp=t3_config)
@@ -168,13 +157,10 @@ class ChatterboxRomanian:
         # Load fine-tuned checkpoint
         checkpoint_path = checkpoint_dir / "model.safetensors"
         if not checkpoint_path.exists():
-            # Try pytorch_model.bin as fallback
-            checkpoint_path = checkpoint_dir / "pytorch_model.bin"
-            if not checkpoint_path.exists():
-                raise FileNotFoundError(
-                    f"No checkpoint found in {checkpoint_dir}. "
-                    f"Expected model.safetensors or pytorch_model.bin"
-                )
+            raise FileNotFoundError(
+                f"No checkpoint found in {checkpoint_dir}. "
+                f"Expected model.safetensors"
+            )
 
         # Load state dict
         if str(checkpoint_path).endswith(".safetensors"):
@@ -214,10 +200,7 @@ class ChatterboxRomanian:
 
         t3.to(device).eval()
 
-        # ─────────────────────────────────────────────────────────────────
         # Assemble ChatterboxTTS engine
-        # ─────────────────────────────────────────────────────────────────
-
         engine = ChatterboxTTS(
             t3=t3,
             s3gen=s3gen,
@@ -237,9 +220,6 @@ class ChatterboxRomanian:
     ) -> "ChatterboxRomanian":
         """
         Load Romanian TTS model from HuggingFace Hub.
-
-        This is a placeholder for future HuggingFace Hub release.
-        Currently raises NotImplementedError.
 
         Args:
             repo_id: HuggingFace repository ID
@@ -297,7 +277,6 @@ class ChatterboxRomanian:
             >>> sf.write("output.wav", wav.squeeze().numpy(), model.sr)
         """
         # Apply Romanian preprocessing
-        # Maps: ș→sh, ț→ts, keeps ă/â/î, lowercases
         processed_text = preprocess_and_normalize(
             text,
             lowercase=True,

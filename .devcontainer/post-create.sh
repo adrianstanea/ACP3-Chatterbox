@@ -1,31 +1,19 @@
 #!/bin/bash
-# Post-create script for devcontainer
-# This script sets up the development environment after container creation
-# Can be run multiple times safely (idempotent where possible)
 
-set -e  # Exit on error
+set -e
 
 echo "========================================"
 echo "Running post-create setup..."
 echo "========================================"
 
-# Bad installation - i stopped mid install - might be safe to remove
-# # Step 0: Clean up any corrupted torch installations
-# echo ""
-# echo "[0/8] Cleaning up corrupted installations..."
-# rm -rf /usr/local/lib/python3.12/dist-packages/~orch* /usr/local/lib/python3.12/dist-packages/~unctorch 2>/dev/null || true
-# echo "✓ Cleanup complete"
-
-# Step 1: Upgrade pip and install compatible setuptools (Python 3.12 compatibility)
 echo ""
-echo "[1/8] Upgrading pip and installing compatible setuptools..."
+echo "[1/8] Upgrading pip and installing compatible setuptools (Python 3.12 compatibility)..."
 pip install --upgrade pip wheel
 # Install setuptools 69.5.1 for pkg_resources (needed by Perth watermarker)
 # See: https://github.com/resemble-ai/Perth/issues/7
 pip install setuptools==69.5.1
 echo "✓ pip, wheel, and setuptools 69.5.1 installed"
 
-# Step 2: Install vendor dependencies first (exact versions)
 echo ""
 echo "[2/8] Installing vendor dependencies..."
 if [ -f vendor/chatterbox-finetuning/requirements.txt ]; then
@@ -41,28 +29,23 @@ else
     echo "⚠ Vendor requirements not found, skipping"
 fi
 
-# Step 2b: Install additional workspace dependencies
 echo ""
 echo "[2b/8] Installing workspace dependencies..."
 if [ -f requirements.txt ]; then
-    # Install remaining dependencies (jiwer, pesq, pystoi for evaluation)
     pip install --no-cache-dir -r /workspace/requirements.txt
     echo "✓ Workspace dependencies installed"
 else
     echo "⚠ requirements.txt not found, skipping"
 fi
 
-# Step 3: Initialize git submodules
 echo ""
 echo "[3/8] Initializing git submodules..."
 if [ -f .gitmodules ]; then
-    # Check if we're in a worktree or regular repo
     if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
         git submodule update --init --recursive
         echo "✓ Git submodules initialized"
     else
         echo "⊘ Running in container - git submodules should be initialized on host"
-        # Check if vendor directory exists (already initialized on host)
         if [ -d vendor/chatterbox-finetuning/.git ]; then
             echo "✓ Vendor submodule already present"
         else
@@ -73,7 +56,6 @@ else
     echo "⚠ No git submodules found, skipping"
 fi
 
-# Step 4: Download pretrained models and extend tokenizer
 echo ""
 echo "[4/8] Pretrained models setup..."
 if [ -d vendor/chatterbox-finetuning ]; then
@@ -112,12 +94,10 @@ fi
 
 echo ""
 echo "[5/8] Installing metrics pipeline dependencies..."
-# Install metrics dependencies for evaluation
 pip install --no-cache-dir openai-whisper jiwer resemblyzer pydub pyworld pysptk webrtcvad num2words \
     fastdtw Levenshtein nltk jellyfish matplotlib seaborn 2>/dev/null || true
 echo "✓ Metrics base dependencies installed"
 
-# Install discrete-speech-metrics (UTMOS, MCD, F0 RMSE)
 if [ ! -d /tmp/DiscreteSpeechMetrics ]; then
     echo "Installing discrete-speech-metrics from git..."
     cd /tmp

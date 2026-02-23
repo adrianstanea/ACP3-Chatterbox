@@ -1,9 +1,2 @@
-chatterbox-tts
-librosa
-soundfile
-tensorboard
-jiwer
-pesq
-pystoi
 python-dotenv
 torch-tb-profiler

@@ -42,15 +42,4 @@ This directory contains language-specific character extensions for the Chatterbo
 }
 ```
 
-## Examples Needed
-
-We welcome contributions for:
-- Vietnamese (tonal diacritics)
-- Polish (ą, ć, ę, ł, ń, ó, ś, ź, ż)
-- Czech (ř, ě, ů, etc.)
-- Hungarian (ő, ű, etc.)
-- Arabic script languages
-- Cyrillic languages beyond Russian
-- Any other language with special characters!
-
 See `../docs/ADDING-LANGUAGES.md` for complete guide.

@@ -2,9 +2,8 @@
 # Docker CLI Alternative to docker-compose
 # Use these commands when docker-compose is not available
 
-set -e  # Exit on error
+set -e
 
-# Load environment variables from .env file
 if [ -f .env ]; then
     export $(grep -v '^#' .env | xargs)
 else
@@ -18,14 +17,12 @@ fi
 IMAGE_NAME="chatterbox:latest"
 CONTAINER_NAME="chatterbox"
 
-# Function: Build the Docker image
 build() {
     echo "Building Docker image: $IMAGE_NAME"
     docker build -t "$IMAGE_NAME" .
     echo "✓ Build complete"
 }
 
-# Function: Run the container
 run() {
     echo "Starting container: $CONTAINER_NAME"
 
@@ -58,46 +55,39 @@ run() {
     echo "    OUTPUT_PATH=/data/output"
 }
 
-# Function: Start existing container
 start() {
     echo "Starting existing container: $CONTAINER_NAME"
     docker start "$CONTAINER_NAME"
     echo "✓ Container started"
 }
 
-# Function: Stop container
 stop() {
     echo "Stopping container: $CONTAINER_NAME"
     docker stop "$CONTAINER_NAME"
     echo "✓ Container stopped"
 }
 
-# Function: Execute bash in container
 exec_bash() {
     echo "Entering container: $CONTAINER_NAME"
     docker exec -it "$CONTAINER_NAME" bash
 }
 
-# Function: Run post-create setup
 setup() {
     echo "Running post-create setup..."
     docker exec "$CONTAINER_NAME" bash /workspace/.devcontainer/post-create.sh
     echo "✓ Setup complete"
 }
 
-# Function: Remove container
 remove() {
     echo "Removing container: $CONTAINER_NAME"
     docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
     echo "✓ Container removed"
 }
 
-# Function: Show logs
 logs() {
     docker logs -f "$CONTAINER_NAME"
 }
 
-# Function: Show usage
 usage() {
     cat << EOF
 Docker CLI Alternative to docker-compose
@@ -139,13 +129,11 @@ Examples:
 EOF
 }
 
-# Function: Build and run
 build_and_run() {
     build
     run
 }
 
-# Function: Full setup (build, run, setup)
 full_setup() {
     build
     run
