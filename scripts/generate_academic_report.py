@@ -14,7 +14,7 @@ def main():
     parser.add_argument(
         "--reports-dir",
         type=Path,
-        default=Path("doc/reports"),
+        default=Path("experiments/2026-02-23/reports"),
         help="Directory containing existing metrics summaries",
     )
     parser.add_argument(
@@ -78,7 +78,8 @@ def main():
     try:
         run_analysis_pipeline(args)
     except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
 
 

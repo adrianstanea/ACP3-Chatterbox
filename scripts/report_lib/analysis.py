@@ -28,8 +28,8 @@ def analyze_dataset_characteristics(metadata: pd.DataFrame, splits: Dict) -> Dic
     }
 
     # Text statistics
-    text_lengths = metadata["text"].str.len()
-    word_counts = metadata["text"].str.split().str.len()
+    text_lengths = metadata["transcription"].str.len()
+    word_counts = metadata["transcription"].str.split().str.len()
 
     results["text_statistics"] = {
         "char_count_mean": float(text_lengths.mean()),
@@ -38,7 +38,7 @@ def analyze_dataset_characteristics(metadata: pd.DataFrame, splits: Dict) -> Dic
         "char_count_max": int(text_lengths.max()),
         "word_count_mean": float(word_counts.mean()),
         "word_count_std": float(word_counts.std()),
-        "unique_chars": len(set("".join(metadata["text"]))),
+        "unique_chars": len(set("".join(metadata["transcription"]))),
     }
 
     # Audio properties (if duration column exists)
@@ -99,9 +99,12 @@ def analyze_training_dynamics(trainer_state: Dict) -> Dict[str, Any]:
 
 def analyze_performance(metrics: Dict[str, pd.DataFrame]) -> Dict[str, Any]:
     """Analyze model performance across conditions."""
+    from .statistics import compare_conditions
+
     results = {
         "conditions": {},
         "overall": {},
+        "statistical_tests": {},
     }
 
     metric_names = ["CER", "WER", "UTMOS_Synthesized", "Speaker_Cosine_Similarity"]
@@ -118,7 +121,12 @@ def analyze_performance(metrics: Dict[str, pd.DataFrame]) -> Dict[str, Any]:
                     "min": float(values.min()),
                     "max": float(values.max()),
                     "median": float(values.median()),
+                    "n": int(len(values)),
                 }
+
+    # Run pairwise comparisons
+    for metric in metric_names:
+        results["statistical_tests"][metric] = compare_conditions(metrics, metric)
 
     # Overall statistics
     for metric in metric_names:

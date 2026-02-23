@@ -19,7 +19,7 @@ def load_metrics_csvs(metrics_dir: Path) -> Dict[str, pd.DataFrame]:
     for csv_file in csv_files:
         condition = csv_file.stem
         try:
-            df = pd.read_csv(csv_file)
+            df = pd.read_csv(csv_file, sep='|')
             metrics[condition] = df
             print(f"Loaded {condition}: {len(df)} samples")
         except Exception as e:
@@ -47,7 +47,9 @@ def load_dataset_metadata(metadata_path: Path) -> pd.DataFrame:
     if not metadata_path.exists():
         raise FileNotFoundError(f"Metadata file not found: {metadata_path}")
 
-    df = pd.read_csv(metadata_path)
+    df = pd.read_csv(metadata_path, sep='|', header=None, names=['audio_file', 'transcription', 'quality'])
+    # Extract speaker ID from filename (e.g., "bas_rnd1" from "bas_rnd1_001.wav")
+    df['speaker'] = df['audio_file'].str.extract(r'([a-z]+_rnd\d+)_\d+\.wav')[0]
     print(f"Loaded dataset metadata: {len(df)} entries")
     return df
 
@@ -61,7 +63,10 @@ def load_dataset_splits(splits_dir: Path) -> Dict:
     for split_file in ["train.csv", "val.csv", "test_holdout.csv"]:
         path = splits_dir / split_file
         if path.exists():
-            splits[split_file.replace(".csv", "")] = pd.read_csv(path)
+            df = pd.read_csv(path, sep='|', header=None, names=['sample_id', 'original_text', 'synthesized_text'])
+            # Extract speaker ID from sample_id (e.g., "bas_rnd1" from "bas_rnd1_101")
+            df['speaker'] = df['sample_id'].str.extract(r'^([a-z]+_rnd\d+)_\d+')[0]
+            splits[split_file.replace(".csv", "")] = df
             print(
                 f"Loaded {split_file}: {len(splits[split_file.replace('.csv', '')])}"
                 " samples"
@@ -95,7 +100,7 @@ def load_filelists(filelists_dir: Path) -> Dict[str, pd.DataFrame]:
     csv_files = sorted(filelists_dir.glob("*.csv"))
     for csv_file in csv_files:
         condition = csv_file.stem
-        df = pd.read_csv(csv_file)
+        df = pd.read_csv(csv_file, sep='|')
         filelists[condition] = df
         print(f"Loaded filelist {condition}: {len(df)} files")
 
