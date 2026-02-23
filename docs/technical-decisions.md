@@ -716,6 +716,7 @@ batch_size = config.batch_size // world_size
 | 5 | Chatterbox punc_norm for text | 2026-02-21 | Superseded by #7 | Text normalization |
 | 6 | Single-GPU (multi-GPU deferred) | 2026-02-21 | Deferred | Training strategy |
 | 7 | Phoneme mapping over vocab extension | 2026-02-22 | Final | Tokenization strategy |
+| 8 | Relaxed token repetition threshold | 2026-02-23 | Final | Inference quality |
 
 ---
 
@@ -902,6 +903,186 @@ OUT: "întselepciunea înseamnă să shtii că shi cea mai întunecată noapte..
 - stlohrey/chatterbox-finetuning: Alternative fine-tuning repo (fork of resemble-ai/chatterbox)
 - Tokenizer vocabulary: `grapheme_mtl_merged_expanded_v1.json` (2,454 tokens, HuggingFace)
 - Implementation: `vendor/chatterbox-finetuning/src/romanian_preprocessor.py`
+
+---
+
+## Decision 8: Relaxed Token Repetition Threshold for Inference
+
+**Date:** February 23, 2026
+**Status:** FINAL
+**Category:** Inference Quality Optimization
+
+### Context
+
+During inference evaluation on Romanian text, we observed that many sentences were being stopped before completion. The `AlignmentStreamAnalyzer` module, which monitors text-speech alignment during streaming synthesis, was detecting token repetition too aggressively and forcing early termination by emitting EOS (end-of-sequence) tokens prematurely.
+
+The alignment stream analyzer uses attention map heuristics to detect various inference integrity issues including:
+
+- False starts (noisy beginning chunks)
+- Long tails (hallucinations after text completion)
+- Repetition (repeating text content)
+- Discontinuity (alignment jumps)
+
+The token repetition detection was triggering false positives, particularly affecting shorter sentences and natural language patterns that involve legitimate short-term repetitions.
+
+### Problem Analysis
+
+**Observed Symptoms:**
+
+- Shorter sentences frequently truncated before completion
+- Natural token patterns (e.g., "și și" - "and and" in Romanian) triggering premature stops
+- Inconsistent completion rates across evaluation dataset
+- Model attempting to continue but being forced to emit EOS by the analyzer
+
+**Root Cause:**
+The token repetition detection threshold was too strict, not allowing enough consecutive identical tokens before classifying the behavior as problematic. This over-conservative approach prioritized avoiding hallucinations at the cost of sentence completion quality.
+
+### Decision
+
+**Chosen:** Relax the token repetition detection threshold to allow up to **5 consecutive identical tokens** before forcing EOS termination.
+
+**Implementation:**
+
+```python
+# Before: Stricter threshold (exact value varied)
+# After: Explicit 5-token window
+token_repetition = (
+    len(self.generated_tokens) >= 5 and
+    len(set(self.generated_tokens[-5:])) == 1
+)
+```
+
+**Key Changes:**
+
+- Increased tolerance for consecutive identical tokens from a stricter threshold to 5 tokens
+- Maintains a circular buffer of the last 8 generated tokens for efficient checking
+- Still provides safeguard against genuine infinite loops and hallucinations
+- Commented out `self.complete` condition to allow detection throughout generation
+
+### Rationale
+
+1. **Balance Quality and Completeness:** The 5-token threshold balances between preventing genuine hallucinations (infinite loops) and allowing natural language patterns to complete
+
+2. **Empirical Observation:** Testing showed that legitimate sentence completions rarely require more than 4 consecutive identical tokens, while problematic loops typically extend beyond 5 tokens
+
+3. **Romanian Language Considerations:** Romanian text may have legitimate repetitions (conjunctions, prepositions in complex sentences) that should not trigger early termination
+
+4. **Inference-Specific:** This issue is specific to the streaming inference pipeline where online decision-making is required; training uses different mechanisms
+
+5. **Conservative Safety Margin:** 5 tokens still provides adequate protection against the most common hallucination patterns while being permissive enough for natural completion
+
+### Impact
+
+**Positive:**
+
+- ✅ Shorter sentences complete more consistently
+- ✅ Reduced false-positive detection of problematic repetitions
+- ✅ Improved overall inference quality for Romanian text synthesis
+- ✅ Better alignment with expected sentence lengths from training data
+
+**Trade-offs:**
+
+- ⚠️ Slightly increased risk of allowing hallucinations (5 tokens vs. stricter threshold)
+- ⚠️ May allow some edge cases with 4-5 token natural repetitions that could be artifacts
+
+**Risk Mitigation:**
+
+- The analyzer still includes other safeguards (long tail detection, alignment discontinuity)
+- 5 tokens is conservative enough to catch most infinite loop scenarios
+- Monitoring and evaluation metrics will surface any quality degradation
+
+### Alternatives Considered
+
+**Option A: Keep Stricter Threshold**
+
+- **Approach:** Maintain the original, more conservative repetition detection
+- **Pros:** Maximum protection against hallucinations
+- **Cons:** Unacceptable sentence truncation rates, poor user experience
+- **Status:** **Rejected** — prioritized completion quality over theoretical hallucination risk
+
+**Option B: Disable Repetition Detection Entirely**
+
+- **Approach:** Remove token repetition checking from the analyzer
+- **Pros:** Maximum sentence completion freedom
+- **Cons:** No protection against infinite loops, potential system hangs, poor audio quality from hallucinations
+- **Status:** **Rejected** — too risky, removes important safety mechanism
+
+**Option C: Dynamic Threshold Based on Sentence Length**
+
+- **Approach:** Use stricter threshold (3 tokens) for long sentences, relaxed (7 tokens) for short ones
+- **Pros:** Adaptive behavior tailored to context
+- **Cons:** Adds complexity, harder to tune, requires sentence length prediction
+- **Status:** **Deferred** — may revisit if fixed threshold proves insufficient
+
+**Option D: 3-Token or 4-Token Threshold**
+
+- **Approach:** Use a less relaxed threshold than 5 tokens
+- **Pros:** More conservative safety margin
+- **Cons:** Still showed false positives in testing, particularly with short sentences
+- **Status:** **Rejected** — 5 tokens provided better empirical results
+
+### Implementation
+
+**Files Modified:**
+
+| File | Lines | Change |
+|------|-------|--------|
+| `vendor/chatterbox-finetuning/src/chatterbox_/models/t3/inference/alignment_stream_analyzer.py` | 154-164 | Updated token repetition detection to use 5-consecutive-token threshold |
+
+**Code Location:**
+
+- Module: `AlignmentStreamAnalyzer` class
+- Method: `step(self, logits, next_token=None)`
+- Lines: 154-164 in `alignment_stream_analyzer.py`
+
+**Configuration:**
+
+- No configuration parameter added (hardcoded threshold)
+- Future enhancement: Could expose as `max_consecutive_tokens` parameter
+
+### Future Work
+
+**Training-Time Investigation:**
+
+This fix was applied specifically to the inference pipeline. However, a similar issue may affect training dynamics:
+
+**Hypothesis:** During training, the alignment analyzer runs in checkpoint evaluation callbacks. If repetition detection was too aggressive during training, the model may have been forced to stop before generating full sequences, biasing the learned policy toward shorter outputs.
+
+**Recommended Study:**
+
+1. Apply the relaxed (5-token) repetition threshold during training
+2. Conduct comparative experiments:
+   - **Baseline:** Current training with strict repetition detection
+   - **Treatment:** Training with relaxed threshold
+3. Evaluate metrics:
+   - Average generated sequence length
+   - Text-audio alignment quality
+   - Completion rate for longer sentences
+   - Overall synthesis quality (MOS, WER, MCD)
+4. Determine if inference adjustments can be reduced or eliminated with better training
+
+**Expected Outcome:** The model might learn better text-speech alignment and completion behaviors if not penalized for legitimate short-term repetitions during training.
+
+### Verification
+
+**Testing Approach:**
+
+- Evaluated on Romanian sentences from test dataset
+- Compared completion rates before/after threshold change
+- Monitored for any increase in hallucination artifacts
+
+**Results:**
+
+- Significant improvement in completion rates for shorter utterances
+- Longer sentences with natural repetition patterns (e.g., "și și") no longer trigger premature stops
+- No observed increase in hallucination frequency
+
+### References
+
+- Implementation: `vendor/chatterbox-finetuning/src/chatterbox_/models/t3/inference/alignment_stream_analyzer.py`
+- Documentation: `docs/SESSION-2026-02-23.md`
+- Related: Attention-based alignment mechanisms (Tacotron 2, Transformer TTS literature)
+- Module: `AlignmentStreamAnalyzer` exploits implicit text-speech alignment in transformer self-attention maps
 
 ---
 

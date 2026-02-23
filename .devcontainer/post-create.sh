@@ -9,6 +9,13 @@ echo "========================================"
 echo "Running post-create setup..."
 echo "========================================"
 
+# Bad installation - i stopped mid install - might be safe to remove
+# # Step 0: Clean up any corrupted torch installations
+# echo ""
+# echo "[0/8] Cleaning up corrupted installations..."
+# rm -rf /usr/local/lib/python3.12/dist-packages/~orch* /usr/local/lib/python3.12/dist-packages/~unctorch 2>/dev/null || true
+# echo "✓ Cleanup complete"
+
 # Step 1: Upgrade pip and install compatible setuptools (Python 3.12 compatibility)
 echo ""
 echo "[1/8] Upgrading pip and installing compatible setuptools..."
@@ -153,6 +160,22 @@ if [ -d /workspace/data/processed/MyTTSDataset/wavs ]; then
     fi
 else
     echo "⊘ Dataset directory not found, skipping symlink fix"
+fi
+
+echo ""
+echo "[7/8] Ensuring setuptools and Perth are properly configured..."
+# Some packages (like torch with --force-reinstall) may upgrade setuptools
+# Perth requires setuptools 69.5.1, so we pin it again after all installations
+CURRENT_SETUPTOOLS=$(pip show setuptools | grep Version | cut -d' ' -f2)
+if [ "$CURRENT_SETUPTOOLS" != "69.5.1" ]; then
+    echo "⚠ setuptools was upgraded to $CURRENT_SETUPTOOLS, downgrading to 69.5.1..."
+    pip install setuptools==69.5.1
+    # Reinstall Perth to ensure it works with correct setuptools
+    pip uninstall -y resemble-perth 2>/dev/null || true
+    pip install resemble-perth
+    echo "✓ setuptools and Perth fixed"
+else
+    echo "✓ setuptools 69.5.1 intact, Perth should work"
 fi
 
 echo ""
