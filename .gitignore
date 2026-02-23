@@ -40,6 +40,9 @@ env/
 data/processed/
 data/output/
 eval/
+# But keep test sentences for inference validation
+!data/eval/
+!data/eval/test_sentences.csv
 *.pt
 *.pth
 *.safetensors
@@ -53,3 +56,16 @@ chatterbox_output/
 # Logs
 *.log
 tensorboard/
+
+# Certificates
+certs/
+*.crt
+*.pem
+*.key
+
+experiments
+outputs
+
+docs/*.html
+docs/*.css
+docs/**/*.wav

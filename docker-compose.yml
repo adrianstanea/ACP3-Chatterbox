@@ -1,0 +1,21 @@
+services:
+  chatterbox:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/workspace
+      - ${SWARA_PATH}:/data/swara:ro
+      - ${OUTPUT_PATH}:/data/output
+    working_dir: /workspace
+    env_file: .env
+    shm_size: '16gb'
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: ${NUM_GPUS:-1}
+              capabilities: [gpu]
+    stdin_open: true
+    tty: true
