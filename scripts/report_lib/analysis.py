@@ -82,12 +82,20 @@ def analyze_training_dynamics(trainer_state: Dict) -> Dict[str, Any]:
     results["metadata"]["total_epochs"] = trainer_state.get("epoch", None)
     results["metadata"]["global_steps"] = trainer_state.get("global_step", None)
 
-    # Loss curves (if available in training_loss key)
-    if "training_loss" in trainer_state:
+    # Loss curves from log_history (preferred) or training_loss
+    losses = []
+    if "log_history" in trainer_state:
+        log_history = trainer_state["log_history"]
+        losses = [log.get("loss") for log in log_history if "loss" in log]
+    elif "training_loss" in trainer_state:
         losses = trainer_state["training_loss"]
-        results["convergence"]["training_loss_initial"] = float(losses[0]) if losses else None
-        results["convergence"]["training_loss_final"] = float(losses[-1]) if losses else None
-        results["convergence"]["training_loss_min"] = float(min(losses)) if losses else None
+    
+    if losses:
+        results["convergence"]["training_loss_initial"] = float(losses[0])
+        results["convergence"]["training_loss_final"] = float(losses[-1])
+        results["convergence"]["training_loss_min"] = float(min(losses))
+        results["convergence"]["training_loss_max"] = float(max(losses))
+        results["convergence"]["num_logs"] = len(losses)
 
     # Best metrics
     for key in ["best_loss", "best_eval_loss", "best_model_checkpoint"]:
@@ -158,37 +166,60 @@ def analyze_voice_adaptation(metrics: Dict[str, pd.DataFrame], splits: Dict) -> 
 
 
 def analyze_ablation_effects(metrics: Dict[str, pd.DataFrame]) -> Dict[str, Any]:
-    """Analyze parameter ablation effects."""
+    """Analyze parameter ablation effects for each synthesizer.
+    
+    Computes metrics for all 8 conditions:
+    - BAS: bas_exag0.3_cfg0.3, bas_exag0.3_cfg0.5, bas_exag0.7_cfg0.3, bas_exag0.7_cfg0.5
+    - SGS: sgs_exag0.3_cfg0.3, sgs_exag0.3_cfg0.5, sgs_exag0.7_cfg0.3, sgs_exag0.7_cfg0.5
+    """
+    metric_names = ["CER", "WER", "UTMOS_Synthesized", "Speaker_Cosine_Similarity"]
+    
     results = {
-        "synthesizer_effect": {},
-        "exaggeration_effect": {},
-        "guidance_effect": {},
-        "interactions": {},
+        "by_condition": {},  # Direct access to all 8 conditions
+        "by_synthesizer": {
+            "BAS": {},
+            "SGS": {},
+        },
+        "main_effects": {},  # Averaged effects per parameter
     }
 
-    # Group conditions
+    # Compute metrics for all 8 conditions
+    for condition, df in metrics.items():
+        results["by_condition"][condition] = {}
+        for metric in metric_names:
+            if metric in df.columns:
+                results["by_condition"][condition][metric] = float(df[metric].mean())
+
+    # Organize by synthesizer for interaction analysis
+    for synthesizer in ["BAS", "SGS"]:
+        prefix = synthesizer.lower() + "_"
+        synth_conditions = [c for c in metrics.keys() if c.startswith(prefix)]
+        
+        for condition in synth_conditions:
+            results["by_synthesizer"][synthesizer][condition] = results["by_condition"].get(condition, {})
+
+    # Main effects (averaging across other parameters)
     bas_conditions = [c for c in metrics.keys() if c.startswith("bas_")]
     sgs_conditions = [c for c in metrics.keys() if c.startswith("sgs_")]
+    exag03_bas = [c for c in bas_conditions if "exag0.3" in c]
+    exag07_bas = [c for c in bas_conditions if "exag0.7" in c]
+    exag03_sgs = [c for c in sgs_conditions if "exag0.3" in c]
+    exag07_sgs = [c for c in sgs_conditions if "exag0.7" in c]
+    cfg03_bas = [c for c in bas_conditions if "cfg0.3" in c]
+    cfg05_bas = [c for c in bas_conditions if "cfg0.5" in c]
+    cfg03_sgs = [c for c in sgs_conditions if "cfg0.3" in c]
+    cfg05_sgs = [c for c in sgs_conditions if "cfg0.5" in c]
 
-    metric_names = ["CER", "WER", "UTMOS_Synthesized", "Speaker_Cosine_Similarity"]
-
-    # Synthesizer effect
     for metric in metric_names:
-        bas_means = []
-        sgs_means = []
-
-        for cond in bas_conditions:
-            if metric in metrics[cond].columns:
-                bas_means.append(metrics[cond][metric].mean())
-        for cond in sgs_conditions:
-            if metric in metrics[cond].columns:
-                sgs_means.append(metrics[cond][metric].mean())
-
-        if bas_means and sgs_means:
-            results["synthesizer_effect"][metric] = {
-                "bas_mean": float(np.mean(bas_means)),
-                "sgs_mean": float(np.mean(sgs_means)),
-                "difference": float(np.mean(bas_means) - np.mean(sgs_means)),
-            }
+        results["main_effects"][metric] = {
+            "bas_exag03": float(np.mean([results["by_condition"][c].get(metric, 0) for c in exag03_bas])),
+            "bas_exag07": float(np.mean([results["by_condition"][c].get(metric, 0) for c in exag07_bas])),
+            "sgs_exag03": float(np.mean([results["by_condition"][c].get(metric, 0) for c in exag03_sgs])),
+            "sgs_exag07": float(np.mean([results["by_condition"][c].get(metric, 0) for c in exag07_sgs])),
+            "bas_cfg03": float(np.mean([results["by_condition"][c].get(metric, 0) for c in cfg03_bas])),
+            "bas_cfg05": float(np.mean([results["by_condition"][c].get(metric, 0) for c in cfg05_bas])),
+            "sgs_cfg03": float(np.mean([results["by_condition"][c].get(metric, 0) for c in cfg03_sgs])),
+            "sgs_cfg05": float(np.mean([results["by_condition"][c].get(metric, 0) for c in cfg05_sgs])),
+        }
 
     return results

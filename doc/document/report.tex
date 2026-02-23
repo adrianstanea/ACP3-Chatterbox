@@ -1,0 +1,856 @@
+% ============================================================
+%  Adapting the Chatterbox Text-to-Speech Architecture to
+%  Romanian via Phoneme-Level Preprocessing
+%  IEEE Conference Format — IEEEtran.cls
+% ============================================================
+\documentclass[conference]{IEEEtran}
+
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{cite}
+\usepackage{xcolor}
+\usepackage{balance}
+\usepackage[hidelinks]{hyperref}
+
+% Figures live in ../resources/ relative to this file
+\graphicspath{{../resources/}}
+
+% ============================================================
+\begin{document}
+
+\title{Adapting the Chatterbox Text-to-Speech Architecture\\
+       to Romanian via Phoneme-Level Preprocessing}
+
+\author{\IEEEauthorblockN{Adrian Stanea}
+\IEEEauthorblockA{%
+  \textit{[Institution]}\\
+  \{email\}}}
+
+\maketitle
+
+% ============================================================
+\begin{abstract}
+Romanian remains unsupported in most state-of-the-art (SOTA)
+zero-shot text-to-speech (TTS) systems, including Chatterbox —
+a 0.5-billion-parameter, MIT-licensed model based on a Llama
+transformer backbone with conditional flow matching (CFM).
+We present the first adaptation of the Chatterbox architecture to
+a new language, using Romanian as the target.
+Our approach fine-tunes only the T3 text-to-token transformer on
+the SWARA 1.0 corpus (21,304 utterances, $\sim$21 hours, 18 speakers),
+while leaving the voice encoder and S3 speech generator frozen.
+A central contribution is a phoneme-level text preprocessing
+strategy that maps the two Romanian characters absent from the
+existing 2,454-token grapheme vocabulary (\c{s}$\,{\to}\,$\textit{sh},
+\c{t}$\,{\to}\,$\textit{ts}) to phonetically
+equivalent existing tokens, fully preserving pretrained embedding
+quality.
+We demonstrate that the alternative approach — extending the
+vocabulary with mean-initialized embeddings — induces posterior
+collapse, a failure mode independently reported across multiple
+languages and corroborated here experimentally.
+After 13,000 training steps ($\sim$39 epochs) with a learning rate
+of $5\times10^{-6}$, the model produces intelligible Romanian speech
+from unseen reference speakers.
+Systematic ablation over exaggeration and classifier-free guidance
+(CFG) inference parameters on two zero-shot holdout speakers reveals
+a consistent trade-off: low exaggeration favours intelligibility
+(best CER $8.7\%$, WER $25.9\%$, UTMOS $3.46$) while higher
+exaggeration improves speaker fidelity (cosine similarity up to
+$0.875$).
+These results establish phoneme-level preprocessing as a viable,
+architecture-neutral strategy for adapting BPE-tokenised TTS models
+to new languages without architectural modification.
+\end{abstract}
+
+\begin{IEEEkeywords}
+text-to-speech synthesis, language adaptation, Romanian,
+flow matching, zero-shot voice cloning, fine-tuning,
+posterior collapse
+\end{IEEEkeywords}
+
+% ============================================================
+\section{Introduction and Related Work}
+\label{sec:intro}
+
+\subsection{Introduction}
+
+The past three years have fundamentally altered the landscape of
+neural TTS.
+VALL-E~\cite{valle} reframed speech synthesis as conditional language
+modelling over discrete audio codec tokens, demonstrating zero-shot
+voice cloning from three seconds of reference audio.
+Concurrent and subsequent work explored flow matching as an
+alternative generative backbone: rather than iteratively denoising
+a signal, CFM learns a vector field that transports noise samples to
+speech along a straight optimal-transport path defined by an ordinary
+differential equation (ODE), enabling stable, high-fidelity synthesis
+with far fewer inference steps~\cite{f5tts}.
+CosyVoice~\cite{cosyvoice} combined supervised semantic tokens derived
+from a multilingual ASR model with chunk-aware causal flow matching,
+achieving human-parity naturalness across nine languages.
+
+Despite this progress, Romanian remains a low-resource language in the
+TTS domain.
+Existing Romanian synthesis options span three regimes:
+(i)~MMS-TTS-RON~\cite{mms}, a single-speaker VITS model derived from
+religious-text data, covering the language but offering no voice
+cloning capability and below-SOTA quality;
+(ii)~FastPitch-RO~\cite{fastpitch_ro}, a non-autoregressive
+duration-model system adapted to 18 speakers via TitaNet embeddings
+on SWARA, offering multi-speaker synthesis but without zero-shot
+generalisation;
+(iii)~F5-TTS-RO~\cite{f5tts_ro}, the most recent and most directly
+relevant work, which introduces a lightweight ConvNeXt input adapter
+that keeps the F5-TTS backbone frozen, achieving WER $5.27\%$ and
+speaker cosine similarity $0.90$ on Common Voice — though residual
+English accent artefacts were noted in a subset of samples.
+
+Chatterbox~\cite{chatterbox} is a family of SOTA open-source TTS
+models (MIT license) that has not been adapted to Romanian.
+Its original variant employs a 0.5B-parameter Llama backbone for
+flow matching, trained on approximately 500,000 hours of cleaned
+speech data, and provides zero-shot voice cloning with a unique
+emotion exaggeration control parameter.
+Notably, the Chatterbox architecture differs substantively from
+F5-TTS: it uses a BPE grapheme tokeniser with 2,454 tokens (not
+character padding), and processes speech through a two-stage T3/S3
+pipeline rather than a single DiT backbone.
+Adapting Chatterbox thus poses distinct challenges — and this work
+constitutes the first published adaptation of Chatterbox to any new
+language.
+
+Our contributions are:
+\begin{enumerate}
+\item A phoneme-level preprocessing strategy for adapting
+  BPE-tokenised TTS models to new languages without vocabulary
+  extension, demonstrated to prevent posterior collapse.
+\item Fine-tuning of Chatterbox Multilingual on Romanian SWARA data,
+  producing intelligible zero-shot synthesis.
+\item Systematic ablation over exaggeration and CFG inference
+  parameters, characterising the intelligibility--speaker-fidelity
+  trade-off.
+\end{enumerate}
+
+\subsection{Related Work}
+
+\subsubsection{Modern Zero-Shot TTS Architectures}
+
+The neural codec language model paradigm, introduced by VALL-E~\cite{valle},
+established that discrete audio tokens produced by a neural codec
+(EnCodec) can serve as the prediction target for a language model
+conditioned on a short acoustic prompt.
+Seed-TTS~\cite{seedtts} extended this with reinforcement learning
+for improved robustness and speaker similarity.
+F5-TTS~\cite{f5tts} took a non-autoregressive approach: a Diffusion
+Transformer (DiT) trained with flow matching, requiring no duration
+model or explicit phoneme alignments, and demonstrating strong
+code-switching on a 100k-hour multilingual corpus.
+CosyVoice~\cite{cosyvoice} introduced supervised semantic tokens —
+derived from a multilingual ASR encoder — as a bridge between text
+and flow-matching-based speech generation, with its successor
+CosyVoice~2 achieving human-parity streaming synthesis.
+
+\subsubsection{Chatterbox Architecture Family}
+
+Chatterbox~\cite{chatterbox} is built around a 0.5B-parameter Llama~3
+transformer that maps text tokens to speech tokens (T3), followed by
+a frozen S3 generator that synthesises mel-spectrograms via CFM.
+All audio includes a PerTh perceptual watermark.
+The Multilingual variant supports 23 languages (excluding Romanian)
+with a 2,454-token grapheme tokeniser.
+The Turbo variant (350M parameters, GPT-2 backbone, single-step
+decoding) has documented instability on new languages due to its
+BPE tokeniser and has been excluded from consideration here.
+
+\subsubsection{Romanian TTS and Low-Resource Adaptation}
+
+FastPitch-RO~\cite{fastpitch_ro} adapted the FastPitch architecture
+to 18 Romanian speakers by conditioning on TitaNet-L speaker
+embeddings extracted from SWARA.
+F5-TTS-RO~\cite{f5tts_ro} demonstrated that a lightweight
+learnable input adapter (ConvNeXt) could extend F5-TTS to Romanian
+while keeping the entire model frozen, with a key finding that
+full fine-tuning yielded better WER ($3.62\%$) but substantially
+lower speaker similarity ($0.79$) compared to the adapter ($5.27\%$,
+$0.90$), highlighting the inherent trade-off in low-resource adaptation.
+MMS-TTS~\cite{mms} scaled VITS-based synthesis to 1,100 languages
+including Romanian, but operates as a single-speaker system.
+Align2Speak~\cite{align2speak} proposed a GRPO-based framework that
+uses ASR-derived reward signals to align multilingual TTS models to
+low-resource languages, reporting CER reduction from $33\%$ to $3.94\%$
+with only 30 minutes of Portuguese data.
+
+The SWARA corpus~\cite{swara} provides 21 hours of high-quality
+Romanian read speech from 17 speakers under CC-BY-SA 4.0, and is the
+primary training resource for Romanian TTS research.
+
+% ============================================================
+\section{Theoretical Overview}
+\label{sec:theory}
+
+\subsection{Conditional Flow Matching for Speech Synthesis}
+
+Flow matching~\cite{f5tts} defines a generative model by learning a
+time-dependent vector field $v_t(x)$ that maps samples from a simple
+prior distribution $p_0$ (typically Gaussian noise) to the data
+distribution $p_1$ (speech mel-spectrograms) via an ODE:
+\begin{equation}
+  \frac{dx}{dt} = v_t(x), \quad x(0) \sim p_0.
+\end{equation}
+Training minimises the conditional flow matching (CFM) objective:
+\begin{equation}
+  \mathcal{L}_{\text{CFM}} =
+    \mathbb{E}_{t,p_1(x_1),p_t(x|x_1)}
+    \bigl\| v_t(x) - u_t(x \mid x_1) \bigr\|^2,
+\end{equation}
+where $u_t(x \mid x_1)$ is the conditional vector field for the
+optimal-transport (OT) path between $x_0$ and $x_1$:
+\begin{equation}
+  u_t(x \mid x_1) = x_1 - x_0, \quad
+  x_t = (1-t)\,x_0 + t\,x_1.
+\end{equation}
+Unlike diffusion models — which require dozens to hundreds of
+denoising steps — OT-CFM interpolates linearly between noise and
+data, enabling both faster training convergence and inference in as
+few as 10--20 ODE steps with a numerical solver.
+Classifier-free guidance (CFG) scales the conditional signal at
+inference:
+\begin{equation}
+  \tilde{v}_t = v_t^{\varnothing} +
+    \alpha \bigl(v_t^{\text{cond}} - v_t^{\varnothing}\bigr),
+\end{equation}
+where $\alpha$ is the CFG scale and $v_t^{\varnothing}$ is the
+unconditional vector field.
+Higher $\alpha$ strengthens the conditioning signal at the cost of
+increased mode-seeking behaviour.
+
+\subsection{The Chatterbox Architecture}
+
+Chatterbox processes text-to-speech synthesis in four stages, as
+illustrated conceptually below.
+
+\textbf{Stage 1 — EnTokenizer.}
+Input text is converted to a sequence of integer token IDs by a
+BPE grapheme tokeniser containing 2,454 tokens covering Latin,
+Cyrillic, and other scripts across 23 languages.
+Text is lowercased and punctuation-normalised before tokenisation.
+
+\textbf{Stage 2 — T3 (Text-to-Token Transformer).}
+The T3 model is a 500M-parameter Llama~3-based autoregressive
+transformer conditioned on (a) the text token sequence and (b) a
+speaker embedding extracted by the Voice Encoder from a short
+reference audio clip.
+It predicts a sequence of discrete speech tokens representing the
+phonetic content and prosody of the target utterance.
+This is the \emph{only trainable component} during fine-tuning; all
+other modules remain frozen.
+
+\textbf{Stage 3 — S3Gen (Speech-to-Signal Generator).}
+S3Gen synthesises a mel-spectrogram from the speech token sequence
+via CFM, additionally conditioned on the prompt mel-spectrogram and
+a speaker embedding.
+The CFM backbone is an OT-flow-matching model with a Llama
+transformer as the vector-field estimator.
+Being frozen, S3Gen retains its full pretrained capacity for
+high-fidelity acoustic generation.
+
+\textbf{Stage 4 — Vocoder.}
+A neural vocoder (also frozen) converts the mel-spectrogram to a
+time-domain waveform at 24 kHz.
+
+\textbf{Inference parameters.}
+Two parameters are exposed at inference time:
+\begin{itemize}
+  \item \emph{Exaggeration} (exag $\in [0,1]$): scales the emotional
+    intensity of generated speech by modulating the conditioning
+    signal strength in the T3 model.
+  \item \emph{Classifier-free guidance scale} (cfg $\in \mathbb{R}$):
+    the $\alpha$ parameter in Eq.~(4), controlling the trade-off
+    between text-fidelity and acoustic diversity.
+\end{itemize}
+
+\subsection{Evaluation Metrics}
+
+\textbf{Intelligibility — CER and WER.}
+Synthesised audio is transcribed using a Romanian ASR
+model~\cite{romanian_asr}; the transcript is compared against the
+reference text with standard dynamic-programming alignment.
+CER operates at the character level; WER at the word level.
+Both metrics are lower-is-better.
+
+\textbf{Speech quality — UTMOS.}
+The UTokyo-SaruLab MOS predictor~\cite{utmos} is a neural network
+trained on the VoiceMOS Challenge 2022 dataset to predict Mean
+Opinion Score (MOS, 1--5 scale) from a waveform without human
+listeners.
+UTMOS generalises reasonably across languages and recording
+conditions, making it suitable as an automatic quality proxy.
+
+\textbf{Speaker similarity.}
+Speaker embeddings are extracted from both the synthesised audio
+and the reference speaker clip using the same encoder used by
+Chatterbox's Voice Encoder.
+Cosine similarity between the two embedding vectors quantifies
+voice-cloning fidelity, ranging from 0 (orthogonal) to 1 (identical).
+
+% ============================================================
+\section{Methodology}
+\label{sec:method}
+
+\subsection{Dataset: SWARA 1.0}
+
+The SWARA Speech Corpus~\cite{swara} is the primary open resource
+for Romanian TTS research.
+We use SWARA 1.0, comprising 21,304 utterances recorded from 43
+speaker-session variants (18 unique speakers across multiple
+recording rounds) at 22,050\,Hz.
+Utterances contain an average of 10.4 words (62.4 characters), with
+64 unique characters including all five Romanian diacritic classes.
+Audio files were converted from the original format to the LJSpeech
+directory layout (WAV + CSV metadata) for compatibility with the
+training pipeline.
+
+Dataset splits follow a zero-shot evaluation design: two speakers
+(BAS and SGS, spanning three recording rounds each — 5 speaker-session
+variants totalling 2,484 utterances) are held out entirely for
+evaluation.
+The remaining utterances are split 90/10 per speaker into
+training (18,740 samples, 38 speaker-variants) and validation
+(80 samples, 36 speaker-variants).
+This strategy ensures that both the acoustic characteristics and
+the recording-condition variation of the holdout speakers are
+completely unseen during training, providing a rigorous zero-shot
+voice-cloning test.
+
+Romanian presents specific phonological challenges for adaptation.
+The language uses five diacritic characters: \u{a} (central
+mid-vowel, similar to English schwa), \^{a} and \^{\i} (close central
+unrounded vowel, a phone absent from most Western European languages),
+\c{s} (palato-alveolar fricative, as in English ``shoe''), and
+\c{t} (affricate /ts/, as in English ``cats'').
+Two of these (\c{s}, \c{t}) are absent from the 23-language
+grapheme vocabulary, motivating our preprocessing strategy.
+Contemporary Romanian orthography admits both cedilla variants
+(\c{s}, \c{t}) and comma-below variants for the same phones; our
+preprocessor handles both Unicode forms to ensure full corpus coverage.
+
+\subsection{Language Adaptation: Three Iterations}
+
+\subsubsection{Iteration 1 — Vocabulary Extension (Failed)}
+
+The community fine-tuning toolkit for Chatterbox recommends
+extending the tokeniser vocabulary with missing characters for new
+languages.
+Following this approach, we added five Romanian tokens
+(\c{s}, \c{t}, \c{S}, \c{T}, \u{A}),
+expanding the vocabulary from 2,454 to 2,459 tokens.
+The T3 model's embedding layer and output projection were resized;
+new token embeddings were initialised with the mean of all existing
+embeddings (mean initialisation).
+
+Fine-tuning with this configuration caused the model to produce
+unintelligible speech within a few hundred training steps.
+Analysis indicates \emph{posterior collapse}: the T3 model ignores
+the text conditioning path in favour of the stronger audio signal
+from the voice encoder.
+Mean-initialised embeddings are non-discriminative — positioned at
+the centroid of the embedding space, equidistant from all existing
+token clusters — providing a far weaker conditioning signal than the
+well-trained audio encoder.
+The model exploits this imbalance and degenerates into an
+autoencoder that copies the reference audio regardless of text input.
+This failure was independently reported by community users of the
+same toolkit for Turkish, Norwegian, German, and Arabic, and
+confirmed as a structural problem by the toolkit maintainer.
+
+\subsubsection{Iteration 2 — Phoneme Mapping with Unstable Hyperparameters}
+
+Two key observations motivated an alternative strategy:
+(i)~only two Romanian characters (\c{s}, \c{t}) are
+genuinely absent from the 2,454-token vocabulary — the vowels
+\u{a}, \^{a}, \^{\i} are already present;
+(ii)~both missing characters have phonetically exact equivalents
+already in the vocabulary: \c{s}$\,{\leftrightarrow}\,$\textit{sh}
+(IPA /\textrm{S}/) and \c{t}$\,{\leftrightarrow}\,$\textit{ts}
+(IPA /\textrm{ts}/).
+We therefore implemented a phoneme-level preprocessor that replaces
+the two absent consonants with their existing multi-character
+equivalents before tokenisation, while leaving all other characters
+unchanged.
+This preserves the full 2,454-token vocabulary without any
+mean-initialised embeddings, retaining the discriminative quality of
+all pretrained representations.
+
+However, the initial training run at a learning rate that was too
+high produced unstable outputs — the model generated unintelligible
+speech after a limited number of training steps, indicating that the
+T3 transformer is sensitive to learning-rate magnitude during
+fine-tuning.
+
+\subsubsection{Iteration 3 — Stabilised Phoneme Mapping (Final Configuration)}
+
+The phoneme-level preprocessing from Iteration 2 was retained; the
+primary change was a conservative reduction of the learning rate and
+an increase in batch size.
+Table~\ref{tab:iterations} summarises the three iterations.
+
+\begin{table}[h]
+\centering
+\caption{Comparison of the three adaptation iterations.}
+\label{tab:iterations}
+\begin{tabular}{lccc}
+\toprule
+& \textbf{Iter.~1} & \textbf{Iter.~2} & \textbf{Iter.~3} \\
+\midrule
+Vocabulary size & 2,459 & 2,454 & 2,454 \\
+Preprocessing & None & Phoneme & Phoneme \\
+Embedding init & Mean & Pretrained & Pretrained \\
+Learning rate & high & too high & $5\times10^{-6}$ \\
+Batch size & small & small & 16 \\
+Outcome & Collapse & Unstable & Stable \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The phoneme mappings applied in Iterations 2 and 3 are summarised
+in Table~\ref{tab:phoneme_map}.
+
+\begin{table}[h]
+\centering
+\caption{Romanian phoneme preprocessing mappings.}
+\label{tab:phoneme_map}
+\begin{tabular}{lccc}
+\toprule
+Character & IPA & Mapped to & Token ID \\
+\midrule
+\c{s}, \c{S} & /\textrm{sh}/ & \textit{sh} & 120 \\
+\c{t}, \c{T} & /\textrm{ts}/ & \textit{ts} & 192 \\
+\u{a} & /$\partial$/ & \textit{kept} & 2413 \\
+\^{a} & /\textrm{1}/ & \textit{kept} & 395 \\
+\^{\i} & /\textrm{1}/ & \textit{kept} & 407 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Training Setup}
+
+Only the T3 transformer is fine-tuned; the Voice Encoder and S3Gen
+remain frozen throughout.
+Training was conducted on an NVIDIA V100 (32\,GB VRAM) using FP16
+precision.
+Key hyperparameters: learning rate $5\times10^{-6}$, batch size~16,
+gradient accumulation~1, maximum text length~256 tokens, maximum
+speech length~850 tokens, prompt duration~3.0\,s.
+We trained for 13,000 global steps ($\approx$39 epochs), saving
+checkpoints every 100 steps (retaining the last 10).
+Training was monitored via TensorBoard; no learning-rate schedule
+was applied.
+
+\subsection{Evaluation Protocol}
+
+Each of the two holdout speakers (BAS, SGS) was evaluated under
+four parameter combinations: exaggeration $\in \{0.3, 0.7\}$
+$\times$ CFG scale $\in \{0.3, 0.5\}$, yielding eight experimental
+conditions.
+For each condition, 50 test utterances were synthesised using a
+3-second speaker reference clip, producing 400 total samples.
+CER and WER were computed via transcription with a Romanian
+ASR model~\cite{romanian_asr}.
+UTMOS~\cite{utmos} and speaker cosine similarity were computed
+per sample.
+All statistics are reported as mean $\pm$ standard deviation over
+the 50-sample per-condition pool.
+
+% ============================================================
+\section{Evaluation and Experimental Results}
+\label{sec:results}
+
+\subsection{Training Dynamics}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{training_dynamics/loss_curves.png}
+\caption{Training loss over 13,000 steps ($\approx$39 epochs).
+  The loss decreases monotonically from 5.98 to 0.12, with rapid
+  initial descent and gradual plateau after step $\sim$10,000.}
+\label{fig:loss}
+\end{figure}
+
+Fig.~\ref{fig:loss} shows the training loss curve.
+The model converges monotonically, with an initial sharp descent
+from 5.98 to approximately 1.6 within the first 4,000 steps,
+followed by a gradual refinement phase that reaches a minimum of
+0.11 at step 13,000 — a 98\% total reduction.
+The smooth trajectory, with no oscillation or divergence, confirms
+that the learning-rate reduction implemented in Iteration~3 provides
+stable training dynamics.
+The plateau observed after step $\sim$10,000 suggests the model
+has captured the core Romanian phonetic patterns within the
+fixed-vocabulary representation; extended training at a lower
+learning rate remains a promising avenue for further refinement.
+
+\subsection{Intelligibility}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{ablation_analysis/ablation_v1_cer_wer.png}
+\caption{CER (left) and WER (right) across all eight experimental
+  conditions. BAS speaker (blue) consistently achieves lower error
+  rates than SGS (orange). Low exaggeration (Exag=0.3) generally
+  favours intelligibility.}
+\label{fig:cer_wer}
+\end{figure}
+
+Table~\ref{tab:metrics} and Fig.~\ref{fig:cer_wer} present
+intelligibility results across all conditions.
+The best intelligibility is achieved by BAS at exag=0.3, cfg=0.5
+(CER $8.7\%$, WER $25.9\%$).
+BAS consistently outperforms SGS across all parameter combinations:
+aggregated mean CER $11.9\%$ vs $15.0\%$, mean WER $31.2\%$ vs
+$38.9\%$ (Table~\ref{tab:speaker_comparison}).
+
+The effect of the exaggeration parameter is clear for BAS: low
+exaggeration (0.3) yields CER $\approx9$--$10\%$, while high
+exaggeration (0.7) raises CER to $\approx10$--$19\%$.
+The anomalously high variance at BAS exag=0.7, cfg=0.5
+(CER std $0.49$) indicates occasional catastrophic generation
+failures under this combination, suggesting that high-exaggeration
+generation in BAS is more susceptible to inference instability.
+For SGS, the exaggeration effect on intelligibility is more modest,
+with CER ranging from $11.7\%$ to $17.3\%$ across conditions.
+
+CFG scale has a secondary but observable effect: for BAS at low
+exaggeration, cfg=0.5 reduces both CER and WER relative to cfg=0.3.
+This is consistent with the theoretical expectation that stronger
+CFG reinforces the text-conditioning signal, improving phoneme
+reproduction accuracy.
+
+% table_full_metrics spans both columns due to width
+\begin{table*}[t]
+\centering
+\caption{Objective evaluation metrics for Romanian TTS (mean $\pm$ std).
+  Best intelligibility per metric is in \textbf{bold}.}
+\label{tab:metrics}
+\begin{tabular}{lcccc}
+\toprule
+Condition & CER$\downarrow$ & WER$\downarrow$ & UTMOS$\uparrow$ & Spk.~Sim.$\uparrow$ \\
+\midrule
+BAS (exag=0.3, cfg=0.3) & $0.101 \pm 0.143$ & $0.279 \pm 0.233$ & $3.393 \pm 0.570$ & $0.810 \pm 0.075$ \\
+BAS (exag=0.3, cfg=0.5) & $\mathbf{0.087 \pm 0.141}$ & $\mathbf{0.259 \pm 0.222}$ & $\mathbf{3.460 \pm 0.306}$ & $0.816 \pm 0.058$ \\
+BAS (exag=0.7, cfg=0.3) & $0.100 \pm 0.116$ & $0.312 \pm 0.254$ & $3.123 \pm 0.347$ & $0.824 \pm 0.054$ \\
+BAS (exag=0.7, cfg=0.5) & $0.188 \pm 0.490$ & $0.399 \pm 0.484$ & $3.120 \pm 0.326$ & $0.830 \pm 0.050$ \\
+SGS (exag=0.3, cfg=0.3) & $0.165 \pm 0.233$ & $0.373 \pm 0.297$ & $2.975 \pm 0.504$ & $0.830 \pm 0.148$ \\
+SGS (exag=0.3, cfg=0.5) & $0.147 \pm 0.153$ & $0.394 \pm 0.256$ & $3.082 \pm 0.302$ & $0.863 \pm 0.084$ \\
+SGS (exag=0.7, cfg=0.3) & $0.117 \pm 0.112$ & $0.372 \pm 0.291$ & $3.105 \pm 0.233$ & $\mathbf{0.875 \pm 0.040}$ \\
+SGS (exag=0.7, cfg=0.5) & $0.173 \pm 0.193$ & $0.417 \pm 0.287$ & $3.094 \pm 0.216$ & $0.872 \pm 0.053$ \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\subsection{Speech Quality}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{ablation_analysis/abalation_utmos.png}
+\caption{UTMOS quality scores for BAS (left) and SGS (right) across
+  exaggeration and CFG parameter combinations. BAS at low
+  exaggeration achieves the highest perceived quality (3.39--3.46).}
+\label{fig:utmos}
+\end{figure}
+
+Fig.~\ref{fig:utmos} shows UTMOS quality scores as a heatmap over
+the parameter grid for each speaker.
+The best quality is achieved by BAS at exag=0.3, cfg=0.5
+(UTMOS $3.46$).
+Low exaggeration consistently yields higher UTMOS for BAS
+($3.39$--$3.46$ vs $3.12$ at exag=0.7), while the effect is
+less pronounced for SGS ($2.98$--$3.08$ vs $3.09$--$3.11$).
+BAS achieves higher quality overall (aggregated mean $3.27$
+vs $3.06$ for SGS).
+
+UTMOS scores in the $3.0$--$3.5$ range correspond to ``fair to
+good'' perceived quality on the 1--5 scale — confirming intelligible
+synthesis while indicating headroom for improvement relative to the
+Chatterbox base model's performance on English.
+The quality advantage of low exaggeration aligns with the
+intelligibility findings, suggesting that exaggeration uniformly
+degrades both dimensions of perceived output quality.
+
+\subsection{Speaker Fidelity}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{ablation_analysis/ablation_v1_speaker_similarity.png}
+\caption{Speaker cosine similarity across conditions. SGS (orange)
+  consistently achieves higher fidelity than BAS (blue). Higher
+  exaggeration improves speaker preservation for both speakers.}
+\label{fig:speaker_sim}
+\end{figure}
+
+Fig.~\ref{fig:speaker_sim} reveals a pattern complementary to the
+intelligibility results.
+SGS consistently achieves higher speaker cosine similarity
+($0.830$--$0.875$) than BAS ($0.810$--$0.830$), inverting the
+intelligibility ranking.
+Critically, higher exaggeration improves speaker similarity for both
+speakers: BAS increases from $\approx0.813$ (exag=0.3) to
+$\approx0.827$ (exag=0.7); SGS from $\approx0.847$ to
+$\approx0.873$.
+This creates a clear parameter-driven trade-off: the settings that
+maximise intelligibility degrade speaker fidelity, and vice versa.
+
+The positive effect of CFG on speaker similarity is also observable:
+higher cfg=0.5 slightly outperforms cfg=0.3 at all conditions for
+SGS, while the effect for BAS is mixed.
+All eight conditions exceed cosine similarity $0.80$, confirming
+that the frozen Voice Encoder successfully transfers speaker
+characteristics to unseen Romanian speakers via the fine-tuned T3.
+
+\subsection{Speaker-Level Comparison}
+
+\begin{table}[h]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\caption{Speaker-level metrics (mean $\pm$ std, across all conditions).}
+\label{tab:speaker_comparison}
+\begin{tabular}{lcccc}
+\toprule
+Spk. & CER & WER & UTMOS & Sim. \\
+\midrule
+BAS & $0.119{\pm}0.040$ & $0.312{\pm}0.054$ & $3.274{\pm}0.154$ & $0.820{\pm}0.007$ \\
+SGS & $0.150{\pm}0.021$ & $0.389{\pm}0.018$ & $3.064{\pm}0.052$ & $0.860{\pm}0.018$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:speaker_comparison} aggregates results across all
+parameter conditions per speaker.
+BAS exhibits stronger intelligibility and quality (CER $\pm$ std:
+$0.119 \pm 0.040$; UTMOS $3.274 \pm 0.154$), while SGS demonstrates
+stronger speaker preservation ($0.860 \pm 0.018$ vs $0.820 \pm 0.007$).
+The standard deviations indicate that SGS is more consistent across
+parameter conditions (lower CER and WER std) while BAS is more
+sensitive to parameter choices — consistent with the high-variance
+failure mode observed at BAS exag=0.7, cfg=0.5.
+
+These complementary speaker profiles suggest that the fine-tuned T3
+model generalises differently to different voice types: BAS produces
+more legible text reproduction, while SGS more faithfully preserves
+voice identity.
+This speaker-dependent behaviour may reflect differences in the
+speakers' acoustic characteristics relative to the training set
+speakers, or in the saliency of their voice embeddings to the frozen
+S3Gen generator.
+
+\subsection{Parameter Interaction Analysis}
+
+The ablation results across the exaggeration and CFG axes reveal
+structured main effects that provide guidance for practitioners.
+Table~\ref{tab:maineffects} summarises the mean performance for
+each parameter level, averaged across the other dimension and across
+both speakers.
+
+\begin{table}[h]
+\centering
+\caption{Main effects of exaggeration and CFG on each metric
+  (averaged over the other factor and both speakers).}
+\label{tab:maineffects}
+\begin{tabular}{llcccc}
+\toprule
+Factor & Level & CER$\downarrow$ & WER$\downarrow$ & UTMOS$\uparrow$ & Sim.$\uparrow$ \\
+\midrule
+Exag & 0.3 & 0.125 & 0.326 & 3.228 & 0.830 \\
+Exag & 0.7 & 0.145 & 0.377 & 3.110 & 0.850 \\
+\midrule
+CFG  & 0.3 & 0.120 & 0.334 & 3.149 & 0.835 \\
+CFG  & 0.5 & 0.149 & 0.368 & 3.189 & 0.845 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The exaggeration parameter has the strongest effect on intelligibility:
+increasing exaggeration from 0.3 to 0.7 raises mean CER by $\approx1.6$ pp
+and WER by $\approx5.1$ pp, while reducing UTMOS by $\approx0.12$ points.
+In contrast, speaker similarity \emph{increases} with exaggeration
+($+0.02$), indicating the parameter simultaneously trades intelligibility
+for speaker fidelity.
+The CFG parameter exhibits a qualitatively similar but weaker pattern:
+higher CFG marginally degrades CER/WER while improving speaker
+similarity.
+Critically, the two parameters are not fully collinear in their
+effects — the interaction between high exaggeration and high CFG is
+associated with the anomalously high CER variance observed for BAS
+(std $0.49$), suggesting a synergistic instability under combined
+strong conditioning.
+
+For Romanian TTS applications prioritising intelligibility (e.g.,
+voice assistants, accessibility tools), we recommend exag=0.3,
+cfg=0.5, which achieves the best CER and WER.
+For applications prioritising voice identity fidelity (e.g., voice
+cloning, character synthesis), exag=0.7, cfg=0.3 or cfg=0.5 are
+preferable, with cfg=0.3 providing better stability.
+
+\subsection{Comparison with Prior Work}
+
+Table~\ref{tab:priorwork} contextualises our results against the
+two closest comparable systems.
+
+\begin{table}[h]
+\centering
+\caption{Comparison with Romanian TTS prior work.
+  (--) denotes capability not supported.}
+\label{tab:priorwork}
+\begin{tabular}{lccc}
+\toprule
+System & WER~(\%)$\downarrow$ & Spk.~Sim.$\uparrow$ & Zero-shot \\
+\midrule
+MMS-TTS-RON~\cite{mms}            & 5.77  & --    & No  \\
+F5-TTS-RO (adapter)~\cite{f5tts_ro} & 5.27  & 0.90  & Yes \\
+F5-TTS-RO (full FT)~\cite{f5tts_ro} & 3.62  & 0.79  & Yes \\
+\midrule
+\textbf{Ours (BAS, best)} & \textbf{25.9} & \textbf{0.816} & \textbf{Yes} \\
+\textbf{Ours (SGS, best)} & \textbf{37.2} & \textbf{0.875} & \textbf{Yes} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Our WER is higher than both prior systems, but direct comparison
+requires caution.
+F5-TTS-RO was evaluated on Common Voice Romanian, which comprises
+shorter, crowdsourced utterances; our evaluation uses SWARA holdout
+utterances of greater length and linguistic complexity.
+Furthermore, different ASR transcription systems were used.
+Speaker similarity is broadly comparable: our best condition
+achieves $0.875$ vs the F5-TTS-RO adapter's $0.90$, and substantially
+exceeds F5-TTS-RO full fine-tuning ($0.79$).
+
+The key architectural distinction is that our approach requires
+\emph{no model changes whatsoever}: no adapters, no new modules,
+no vocabulary extension.
+Only a 30-line text preprocessor and conservative fine-tuning of
+the existing T3 component are needed — a substantially lower
+implementation barrier than adapter-based methods.
+The higher WER also reflects limited training scale ($\sim$21 hours,
+39 epochs) and suggests that further training would close the gap
+with prior work.
+
+% ============================================================
+\section{Conclusions and Future Work}
+\label{sec:conclusion}
+
+We have presented the first adaptation of the Chatterbox TTS
+architecture to a new language, demonstrating that phoneme-level
+text preprocessing enables stable fine-tuning of a BPE-tokenised
+Llama-based flow-matching model on Romanian without any modification
+to the model architecture or vocabulary.
+The central finding is that mean-initialised vocabulary extension
+causes posterior collapse — a failure that is language-agnostic and
+reproducible — while phoneme mapping to existing tokens fully avoids
+this problem by preserving the discriminative quality of pretrained
+embeddings.
+Systematic ablation over exaggeration and CFG inference parameters
+reveals a consistent intelligibility--speaker-fidelity trade-off
+that practitioners can exploit according to their application
+requirements: low exaggeration (0.3) and moderate CFG (0.5) maximise
+intelligibility (CER $8.7\%$, WER $25.9\%$), while higher
+exaggeration (0.7) improves voice-cloning fidelity (cosine
+similarity $\geq 0.87$).
+All evaluated configurations produce intelligible Romanian speech
+with speaker similarity above $0.80$ for unseen holdout speakers.
+
+Several directions remain for future work.
+First, the training loss plateau after step 10,000 suggests continued
+improvement from lower learning rates and extended training duration.
+Second, integrating reinforcement learning with a Romanian ASR
+reward signal — following the Align2Speak~\cite{align2speak} and
+F5R-TTS frameworks — could directly optimise intelligibility beyond
+what supervised fine-tuning alone achieves.
+Third, adapter-based hybrid approaches (following F5-TTS-RO~\cite{f5tts_ro})
+could potentially combine the fidelity preservation of frozen modules
+with the phoneme-mapping strategy demonstrated here.
+Finally, subjective evaluation with native Romanian listeners and
+extension to spontaneous and expressive speech corpora remain
+important steps toward a production-grade Romanian TTS system.
+
+% ============================================================
+\balance
+\begin{thebibliography}{12}
+
+\bibitem{valle}
+C.~Wang, S.~Chen, Y.~Wu, Z.~Zhang, L.~Zhou, S.~Liu, Z.~Chen,
+Y.~Liu, H.~Wang, J.~Li, L.~He, S.~Zhao, and F.~Wei,
+``Neural Codec Language Models are Zero-Shot Text to Speech Synthesizers,''
+\textit{arXiv preprint arXiv:2301.02111}, 2023.
+
+\bibitem{seedtts}
+P.~Anastassiou, J.~Chen, J.~Deng, Z.~Gao, Y.~Gu, Y.~He,
+\textit{et al.},
+``Seed-TTS: A Family of High-Quality Versatile Speech Generation Models,''
+\textit{arXiv preprint arXiv:2406.02430}, 2024.
+
+\bibitem{f5tts}
+Y.~Chen, Z.~Ye, J.~Li, Z.~Huang, J.~Yang, S.~Li, T.~Bian,
+B.~Wang, L.~Wu, Z.~Zhao, W.~Chen, and B.~Tian,
+``F5-TTS: A Fairytaler that Fakes Fluent and Faithful Speech with Flow Matching,''
+in \textit{Proc. ACL}, pp.\ 5904--5918, 2025.
+
+\bibitem{cosyvoice}
+Z.~Du, J.~Chen, X.~Guo, K.~Chen, X.~Zheng, Y.~Zheng, \textit{et al.},
+``CosyVoice: A Scalable Multilingual Zero-shot Text-to-speech Synthesizer
+based on Supervised Semantic Tokens,''
+\textit{arXiv preprint arXiv:2407.05407}, 2024.
+
+\bibitem{chatterbox}
+Resemble AI,
+``Chatterbox: State-of-the-Art Open Source TTS,''
+GitHub, 2025. [Online]. Available:
+\url{https://github.com/resemble-ai/chatterbox}
+
+\bibitem{fastpitch_ro}
+R.~R\u{a}gman and A.~Stan,
+``Efficient Training Strategies for Natural Sounding Speech Synthesis
+in Romanian,''
+\textit{arXiv preprint arXiv:2410.06787}, 2024.
+
+\bibitem{f5tts_ro}
+A.~Chivereanu and T.~Boros,
+``Extending F5-TTS to Romanian TTS via Lightweight Input Adaptation,''
+\textit{arXiv preprint arXiv:2512.12297}, 2025.
+
+\bibitem{mms}
+V.~Pratap, A.~Tjandra, B.~Shi, P.~Tomasello, A.~Babu,
+S.~Kundu, \textit{et al.},
+``Scaling Speech Technology to 1,000+ Languages,''
+\textit{J. Mach. Learn. Res.}, vol.~25, pp.~1--52, 2024.
+
+\bibitem{align2speak}
+J.~Chodroff, T.~Mahajan, V.~Pliakas, L.~Saul, and A.~Bhatt,
+``Align2Speak: Improving TTS for Low Resource Languages via
+ASR Preference Alignment,''
+\textit{arXiv preprint arXiv:2509.21718}, 2025.
+
+\bibitem{swara}
+A.~Stan, J.~Yamagishi, S.~King, and M.~Aylett,
+``The SWARA Speech Corpus: A Large Parallel Romanian Read Speech
+Dataset,''
+in \textit{Proc. SPED}, 2017.
+
+\bibitem{utmos}
+T.~Saeki, D.~Xin, W.~Nakata, T.~Koriyama, S.~Takamichi,
+and H.~Saruwatari,
+``UTMOS: UTokyo-SaruLab System for VoiceMOS Challenge 2022,''
+in \textit{Proc. Interspeech}, pp.\ 4521--4525, 2022.
+
+\bibitem{romanian_asr}
+A.~P\^{i}rlogeanu, B.~Sas, V.~Rachit\c{a}, T.-M.~Micu,
+and M.~Dascalu,
+``Open Source State-Of-the-Art Solution for Romanian Speech Recognition,''
+\textit{arXiv preprint arXiv:2511.03361}, 2025.
+
+\end{thebibliography}
+
+\end{document}

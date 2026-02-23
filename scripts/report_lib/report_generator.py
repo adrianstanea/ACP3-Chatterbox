@@ -23,6 +23,7 @@ from .visualizations import (
     plot_text_statistics,
     plot_loss_curves,
     plot_performance_comparison,
+    plot_ablation_effects,
 )
 from .tables import (
     generate_metrics_table,
@@ -130,8 +131,8 @@ class AcademicReportGenerator:
             )
             print("  ✓ Text statistics")
 
-        # Training figures
-        if "training_loss" in self.data["trainer_state"]:
+        # Training figures - always generate if log_history exists
+        if "log_history" in self.data["trainer_state"] and len(self.data["trainer_state"]["log_history"]) > 0:
             plot_loss_curves(
                 self.data["trainer_state"],
                 self.output_dirs["figures"] / "training_dynamics",
@@ -146,6 +147,15 @@ class AcademicReportGenerator:
             dpi=self.args.dpi,
         )
         print("  ✓ Performance comparison")
+
+        # Ablation figures
+        if self.analyses["ablation"]:
+            plot_ablation_effects(
+                self.analyses["ablation"],
+                self.output_dirs["figures"] / "ablation_analysis",
+                dpi=self.args.dpi,
+            )
+            print("  ✓ Ablation effects")
 
     def _generate_tables(self):
         """Generate all tables."""
@@ -187,22 +197,24 @@ class AcademicReportGenerator:
 
         # Ablation table
         if (
-            self.analyses["ablation"]["synthesizer_effect"]
-            and ("latex" in self.args.formats or "markdown" in self.args.formats)
+            self.analyses["ablation"] and 
+            ("main_effects" in self.analyses["ablation"] or "by_condition" in self.analyses["ablation"]) and
+            ("latex" in self.args.formats or "markdown" in self.args.formats)
         ):
             ablation_table = generate_ablation_table(self.analyses["ablation"])
 
-            if "latex" in self.args.formats:
-                export_to_latex(
-                    ablation_table,
-                    self.output_dirs["tables"] / "ablation_table.tex",
-                    caption="Ablation Study Results",
-                )
-            if "markdown" in self.args.formats:
-                export_to_markdown(
-                    ablation_table, self.output_dirs["tables"] / "ablation_table.md"
-                )
-            print("  ✓ Ablation table")
+            if not ablation_table.empty:
+                if "latex" in self.args.formats:
+                    export_to_latex(
+                        ablation_table,
+                        self.output_dirs["tables"] / "ablation_table.tex",
+                        caption="Ablation Study Results",
+                    )
+                if "markdown" in self.args.formats:
+                    export_to_markdown(
+                        ablation_table, self.output_dirs["tables"] / "ablation_table.md"
+                    )
+                print("  ✓ Ablation table")
 
     def _generate_json_summaries(self):
         """Export analysis results as JSON."""

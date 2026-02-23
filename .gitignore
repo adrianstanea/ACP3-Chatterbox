@@ -69,3 +69,5 @@ outputs
 docs/*.html
 docs/*.css
 docs/**/*.wav
+
+academic_report

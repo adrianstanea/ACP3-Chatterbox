@@ -85,20 +85,61 @@ def export_to_markdown(df: pd.DataFrame, output_path: Path) -> None:
 
 
 def generate_ablation_table(ablation: Dict[str, Any]) -> pd.DataFrame:
-    """Generate ablation study results table."""
+    """Generate ablation study results table from parameter effects.
+    
+    Shows the effect of each parameter (exag, cfg) for each synthesizer (BAS, SGS).
+    """
     rows = []
 
-    # Synthesizer effect
-    if "synthesizer_effect" in ablation:
-        for metric, effects in ablation["synthesizer_effect"].items():
-            rows.append(
-                {
-                    "Parameter": "Synthesizer",
-                    "Metric": metric,
-                    "BAS": f"{effects.get('bas_mean', 0):.3f}",
-                    "SGS": f"{effects.get('sgs_mean', 0):.3f}",
-                    "Difference": f"{effects.get('difference', 0):.3f}",
-                }
-            )
+    if "main_effects" not in ablation:
+        return pd.DataFrame()
+
+    metrics = ["CER", "WER", "UTMOS_Synthesized", "Speaker_Cosine_Similarity"]
+    
+    for metric in metrics:
+        if metric not in ablation["main_effects"]:
+            continue
+        
+        effects = ablation["main_effects"][metric]
+        
+        # Exaggeration effect for BAS
+        rows.append({
+            "Parameter": "Exaggeration",
+            "Synthesizer": "BAS",
+            "Metric": metric,
+            "Exag 0.3": f"{effects.get('bas_exag03', 0):.4f}",
+            "Exag 0.7": f"{effects.get('bas_exag07', 0):.4f}",
+            "Difference": f"{effects.get('bas_exag03', 0) - effects.get('bas_exag07', 0):.4f}",
+        })
+        
+        # Exaggeration effect for SGS
+        rows.append({
+            "Parameter": "Exaggeration",
+            "Synthesizer": "SGS",
+            "Metric": metric,
+            "Exag 0.3": f"{effects.get('sgs_exag03', 0):.4f}",
+            "Exag 0.7": f"{effects.get('sgs_exag07', 0):.4f}",
+            "Difference": f"{effects.get('sgs_exag03', 0) - effects.get('sgs_exag07', 0):.4f}",
+        })
+        
+        # Guidance scale effect for BAS
+        rows.append({
+            "Parameter": "Guidance",
+            "Synthesizer": "BAS",
+            "Metric": metric,
+            "Cfg 0.3": f"{effects.get('bas_cfg03', 0):.4f}",
+            "Cfg 0.5": f"{effects.get('bas_cfg05', 0):.4f}",
+            "Difference": f"{effects.get('bas_cfg03', 0) - effects.get('bas_cfg05', 0):.4f}",
+        })
+        
+        # Guidance scale effect for SGS
+        rows.append({
+            "Parameter": "Guidance",
+            "Synthesizer": "SGS",
+            "Metric": metric,
+            "Cfg 0.3": f"{effects.get('sgs_cfg03', 0):.4f}",
+            "Cfg 0.5": f"{effects.get('sgs_cfg05', 0):.4f}",
+            "Difference": f"{effects.get('sgs_cfg03', 0) - effects.get('sgs_cfg05', 0):.4f}",
+        })
 
     return pd.DataFrame(rows) if rows else pd.DataFrame()

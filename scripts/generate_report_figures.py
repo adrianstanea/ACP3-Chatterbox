@@ -361,7 +361,10 @@ def generate_figures(
     # =========================================================================
     # Figure 3: Parameter Effect Heatmap (Exaggeration vs CFG)
     # =========================================================================
-    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+    fig = plt.figure(figsize=(12, 4))
+    gs = fig.add_gridspec(1, 3, width_ratios=[1, 1, 0.08], wspace=0.3)
+    axes = [fig.add_subplot(gs[0, 0]), fig.add_subplot(gs[0, 1])]
+    cbar_ax = fig.add_subplot(gs[0, 2])
 
     for idx, speaker in enumerate(["bas", "sgs"]):
         ax = axes[idx]
@@ -395,13 +398,13 @@ def generate_figures(
         ax.set_yticklabels([f"Exag={v}" for v in exag_values])
         ax.set_title(f"Speaker: {speaker.upper()}")
 
-    # Add colorbar
-    fig.colorbar(im, ax=axes.ravel().tolist(), label="UTMOS Score", shrink=0.8)
     fig.suptitle("Parameter Effect on Speech Quality", fontsize=13)
 
-    plt.tight_layout()
-    fig.savefig(output_dir / "fig_parameter_heatmap.png", dpi=150, bbox_inches="tight")
-    fig.savefig(output_dir / "fig_parameter_heatmap.pdf", bbox_inches="tight")
+    # Add colorbar in its own subplot
+    fig.colorbar(im, cax=cbar_ax, label="UTMOS Score")
+
+    fig.savefig(str(output_dir / "fig_parameter_heatmap.png"), dpi=150, bbox_inches="tight")
+    fig.savefig(str(output_dir / "fig_parameter_heatmap.pdf"), bbox_inches="tight")
     plt.close(fig)
     print("Generated: fig_parameter_heatmap.png/pdf")
 
