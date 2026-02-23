@@ -1,0 +1,58 @@
+# Metrics Pipeline Dependencies
+# Install with: pip install -r requirements-metrics.txt
+#
+# Note: discrete-speech-metrics requires special handling - see install instructions below.
+
+# ASR for transcription
+openai-whisper>=20240930
+
+# Text metrics (CER, WER)
+jiwer>=3.0.0
+
+# Speaker similarity
+resemblyzer>=0.1.4
+
+# Audio processing
+pydub>=0.25.1
+pyworld>=0.3.4
+pysptk>=1.0.0
+webrtcvad>=2.0.10
+
+# Text normalization (numbers to words)
+num2words>=0.5.13
+
+# discrete-speech-metrics dependencies (install before the package)
+fastdtw>=0.3.4
+Levenshtein>=0.23.0
+nltk>=3.6.5
+jellyfish>=1.0.3
+
+# Data processing
+pandas>=2.0.0
+numpy>=2.0.0,<2.1.0
+
+# Visualization (for report figures)
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# =============================================================================
+# SPECIAL INSTALLATION INSTRUCTIONS
+# =============================================================================
+# discrete-speech-metrics requires manual installation:
+#
+# 1. Install dependencies first:
+#    pip install -r requirements-metrics.txt
+#
+# 2. Clone and install discrete-speech-metrics:
+#    cd /tmp
+#    git clone https://github.com/Takaaki-Saeki/DiscreteSpeechMetrics.git
+#    cd DiscreteSpeechMetrics
+#    pip install --no-deps -e .
+#
+# 3. Patch the __init__.py to make PESQ optional (pypesq has build issues):
+#    echo 'try:
+#        from .pesq import PESQ
+#    except ImportError:
+#        PESQ = None' > discrete_speech_metrics/__init__.py.tmp
+#    # (Or edit manually to wrap PESQ import in try/except)
+# =============================================================================

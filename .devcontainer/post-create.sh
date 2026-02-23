@@ -11,7 +11,7 @@ echo "========================================"
 
 # Step 1: Upgrade pip and install compatible setuptools (Python 3.12 compatibility)
 echo ""
-echo "[1/6] Upgrading pip and installing compatible setuptools..."
+echo "[1/8] Upgrading pip and installing compatible setuptools..."
 pip install --upgrade pip wheel
 # Install setuptools 69.5.1 for pkg_resources (needed by Perth watermarker)
 # See: https://github.com/resemble-ai/Perth/issues/7
@@ -20,7 +20,7 @@ echo "✓ pip, wheel, and setuptools 69.5.1 installed"
 
 # Step 2: Install vendor dependencies first (exact versions)
 echo ""
-echo "[2/6] Installing vendor dependencies..."
+echo "[2/8] Installing vendor dependencies..."
 if [ -f vendor/chatterbox-finetuning/requirements.txt ]; then
     # Install exact versions from vendor to avoid conflicts
     pip install --no-cache-dir -r vendor/chatterbox-finetuning/requirements.txt
@@ -36,7 +36,7 @@ fi
 
 # Step 2b: Install additional workspace dependencies
 echo ""
-echo "[2b/6] Installing workspace dependencies..."
+echo "[2b/8] Installing workspace dependencies..."
 if [ -f requirements.txt ]; then
     # Install remaining dependencies (jiwer, pesq, pystoi for evaluation)
     pip install --no-cache-dir -r /workspace/requirements.txt
@@ -47,7 +47,7 @@ fi
 
 # Step 3: Initialize git submodules
 echo ""
-echo "[3/6] Initializing git submodules..."
+echo "[3/8] Initializing git submodules..."
 if [ -f .gitmodules ]; then
     # Check if we're in a worktree or regular repo
     if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -68,7 +68,7 @@ fi
 
 # Step 4: Download pretrained models and extend tokenizer
 echo ""
-echo "[4/6] Pretrained models setup..."
+echo "[4/8] Pretrained models setup..."
 if [ -d vendor/chatterbox-finetuning ]; then
     if [ ! -d vendor/chatterbox-finetuning/pretrained_models ]; then
         echo "Downloading pretrained models (~3GB, 5-10 minutes)..."
@@ -83,7 +83,7 @@ if [ -d vendor/chatterbox-finetuning ]; then
     # Restore original tokenizer if previously extended (Romanian preprocessing
     # replaces vocab extension — see src/romanian_preprocessor.py)
     echo ""
-    echo "[4b/6] Verifying original tokenizer (no vocab extension needed)..."
+    echo "[4b/8] Verifying original tokenizer (no vocab extension needed)..."
     TOKENIZER_PATH="vendor/chatterbox-finetuning/pretrained_models/tokenizer.json"
     if [ -f "$TOKENIZER_PATH" ]; then
         VOCAB_SIZE=$(python -c "import json; d=json.load(open('$TOKENIZER_PATH')); print(len(d['model']['vocab']))")
@@ -104,7 +104,40 @@ else
 fi
 
 echo ""
-echo "[5/6] Fixing dataset symlinks for container paths..."
+echo "[5/8] Installing metrics pipeline dependencies..."
+# Install metrics dependencies for evaluation
+pip install --no-cache-dir openai-whisper jiwer resemblyzer pydub pyworld pysptk webrtcvad num2words \
+    fastdtw Levenshtein nltk jellyfish matplotlib seaborn 2>/dev/null || true
+echo "✓ Metrics base dependencies installed"
+
+# Install discrete-speech-metrics (UTMOS, MCD, F0 RMSE)
+if [ ! -d /tmp/DiscreteSpeechMetrics ]; then
+    echo "Installing discrete-speech-metrics from git..."
+    cd /tmp
+    git clone --depth 1 https://github.com/Takaaki-Saeki/DiscreteSpeechMetrics.git
+    cd DiscreteSpeechMetrics
+    pip install --no-deps -e . 2>/dev/null || true
+    # Patch __init__.py to make PESQ optional (pypesq has build issues with Python 3.12)
+    cat > discrete_speech_metrics/__init__.py << 'INITEOF'
+from .mcd import MCD
+from .logf0rmse import LogF0RMSE
+try:
+    from .pesq import PESQ
+except ImportError:
+    PESQ = None  # pypesq not available
+from .speechbertscore import SpeechBERTScore
+from .speechbleu import SpeechBLEU
+from .speechtokendistance import SpeechTokenDistance
+from .utmos import UTMOS
+INITEOF
+    cd /workspace
+    echo "✓ discrete-speech-metrics installed"
+else
+    echo "✓ discrete-speech-metrics already installed"
+fi
+
+echo ""
+echo "[6/8] Fixing dataset symlinks for container paths..."
 if [ -d /workspace/data/processed/MyTTSDataset/wavs ]; then
     # Recreate symlinks to point to container mount path /data/swara
     # (original symlinks point to host paths that don't exist in container)
@@ -128,7 +161,7 @@ echo "✓ Post-create setup complete!"
 echo "========================================"
 echo ""
 echo "Next steps:"
-echo "  1. Verify preprocessing: cd vendor/chatterbox-finetuning && python -m src.romanian_preprocessor demo"
-echo "  2. Start training (first run with preprocess=True in config.py):"
-echo "     cd vendor/chatterbox-finetuning && python train.py 2>&1 | tee training.log"
+echo "  1. Verify environment: python -c 'import whisper; from discrete_speech_metrics import UTMOS; print(\"OK\")'"
+echo "  2. Run experiments: ./scripts/run_full_experiment.sh --skip-synthesis"
+echo "  3. Or start training: cd vendor/chatterbox-finetuning && python train.py"
 echo ""
