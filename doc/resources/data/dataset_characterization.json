@@ -1,0 +1,81 @@
+{
+  "metadata": {
+    "total_samples": 21304,
+    "unique_speakers": 43
+  },
+  "speaker_distribution": {
+    "total": 43,
+    "per_speaker": {
+      "bea_rnd1": 500,
+      "cau_rnd1": 500,
+      "dcs_rnd1": 500,
+      "ddm_rnd1": 500,
+      "eme_rnd1": 500,
+      "fds_rnd1": 500,
+      "ips_rnd1": 500,
+      "mar_rnd1": 500,
+      "pcs_rnd1": 500,
+      "pss_rnd1": 500,
+      "rms_rnd1": 500,
+      "sam_rnd1": 500,
+      "sds_rnd1": 500,
+      "tss_rnd1": 499,
+      "bas_rnd1": 498,
+      "sgs_rnd1": 498,
+      "bas_rnd3": 497,
+      "bea_rnd3": 497,
+      "dcs_rnd3": 497,
+      "eme_rnd3": 497,
+      "mar_rnd3": 497,
+      "sam_rnd3": 497,
+      "bea_rnd2": 496,
+      "cau_rnd2": 496,
+      "dcs_rnd2": 496,
+      "ddm_rnd2": 496,
+      "eme_rnd2": 496,
+      "fds_rnd2": 496,
+      "ips_rnd2": 496,
+      "mar_rnd2": 496,
+      "pcs_rnd2": 496,
+      "rms_rnd2": 496,
+      "sam_rnd2": 496,
+      "sds_rnd2": 496,
+      "sgs_rnd2": 496,
+      "tss_rnd2": 496,
+      "bas_rnd2": 495,
+      "pss_rnd2": 495,
+      "htm_rnd1": 494,
+      "pss_rnd3": 491,
+      "htm_rnd2": 487,
+      "pmm_rnd2": 478,
+      "pmm_rnd1": 443
+    },
+    "mean_samples_per_speaker": 495.4418604651163,
+    "std_samples_per_speaker": 8.973610731579868
+  },
+  "text_statistics": {
+    "char_count_mean": 62.39171047690574,
+    "char_count_std": 23.440845291912005,
+    "char_count_min": 15,
+    "char_count_max": 148,
+    "word_count_mean": 10.377628614344724,
+    "word_count_std": 3.6073083080061017,
+    "unique_chars": 64
+  },
+  "audio_properties": {},
+  "splits": {
+    "train": {
+      "samples": 18740,
+      "speakers": 38
+    },
+    "val": {
+      "samples": 80,
+      "speakers": 36
+    },
+    "test_holdout": {
+      "samples": 2484,
+      "speakers": 5
+    }
+  },
+  "holdout_speakers": "{'bas_rnd3', 'bas_rnd1', 'bas_rnd2', 'sgs_rnd1', 'sgs_rnd2'}"
+}

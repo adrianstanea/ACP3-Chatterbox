@@ -1,0 +1,98 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\citation{valle}
+\citation{f5tts}
+\citation{cosyvoice}
+\citation{mms}
+\citation{fastpitch_ro}
+\citation{f5tts_ro}
+\citation{chatterbox}
+\citation{valle}
+\citation{seedtts}
+\citation{f5tts}
+\citation{cosyvoice}
+\@writefile{toc}{\contentsline {section}{\numberline {I}Introduction and Related Work}{1}{section.1}\protected@file@percent }
+\newlabel{sec:intro}{{I}{1}{Introduction and Related Work}{section.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {I-A}}Introduction}{1}{subsection.1.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {I-B}}Related Work}{1}{subsection.1.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {I-B}1}Modern Zero-Shot TTS Architectures}{1}{subsubsection.1.2.1}\protected@file@percent }
+\citation{chatterbox}
+\citation{fastpitch_ro}
+\citation{f5tts_ro}
+\citation{mms}
+\citation{align2speak}
+\citation{swara}
+\citation{f5tts}
+\citation{romanian_asr}
+\citation{utmos}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {I-B}2}Chatterbox Architecture Family}{2}{subsubsection.1.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {I-B}3}Romanian TTS and Low-Resource Adaptation}{2}{subsubsection.1.2.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {II}Theoretical Overview}{2}{section.2}\protected@file@percent }
+\newlabel{sec:theory}{{II}{2}{Theoretical Overview}{section.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-A}}Conditional Flow Matching for Speech Synthesis}{2}{subsection.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-B}}The Chatterbox Architecture}{2}{subsection.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-C}}Evaluation Metrics}{2}{subsection.2.3}\protected@file@percent }
+\citation{swara}
+\@writefile{toc}{\contentsline {section}{\numberline {III}Methodology}{3}{section.3}\protected@file@percent }
+\newlabel{sec:method}{{III}{3}{Methodology}{section.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-A}}Dataset: SWARA 1.0}{3}{subsection.3.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-B}}Language Adaptation: Three Iterations}{3}{subsection.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {III-B}1}Iteration 1 — Vocabulary Extension (Failed)}{3}{subsubsection.3.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {III-B}2}Iteration 2 — Phoneme Mapping with Unstable Hyperparameters}{3}{subsubsection.3.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {III-B}3}Iteration 3 — Stabilised Phoneme Mapping (Final Configuration)}{3}{subsubsection.3.2.3}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {I}{\ignorespaces Comparison of the three adaptation iterations.}}{3}{table.1}\protected@file@percent }
+\newlabel{tab:iterations}{{I}{3}{Comparison of the three adaptation iterations}{table.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-C}}Training Setup}{3}{subsection.3.3}\protected@file@percent }
+\citation{romanian_asr}
+\citation{utmos}
+\@writefile{lot}{\contentsline {table}{\numberline {II}{\ignorespaces Romanian phoneme preprocessing mappings.}}{4}{table.2}\protected@file@percent }
+\newlabel{tab:phoneme_map}{{II}{4}{Romanian phoneme preprocessing mappings}{table.2}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Training loss over 13,000 steps ($\approx $39 epochs). The loss decreases monotonically from 5.98 to 0.12, with rapid initial descent and gradual plateau after step $\sim $10,000.}}{4}{figure.1}\protected@file@percent }
+\newlabel{fig:loss}{{1}{4}{Training loss over 13,000 steps ($\approx $39 epochs). The loss decreases monotonically from 5.98 to 0.12, with rapid initial descent and gradual plateau after step $\sim $10,000}{figure.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-D}}Evaluation Protocol}{4}{subsection.3.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {IV}Evaluation and Experimental Results}{4}{section.4}\protected@file@percent }
+\newlabel{sec:results}{{IV}{4}{Evaluation and Experimental Results}{section.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-A}}Training Dynamics}{4}{subsection.4.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces CER (left) and WER (right) across all eight experimental conditions. BAS speaker (blue) consistently achieves lower error rates than SGS (orange). Low exaggeration (Exag=0.3) generally favours intelligibility.}}{4}{figure.2}\protected@file@percent }
+\newlabel{fig:cer_wer}{{2}{4}{CER (left) and WER (right) across all eight experimental conditions. BAS speaker (blue) consistently achieves lower error rates than SGS (orange). Low exaggeration (Exag=0.3) generally favours intelligibility}{figure.2}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces UTMOS quality scores for BAS (left) and SGS (right) across exaggeration and CFG parameter combinations. BAS at low exaggeration achieves the highest perceived quality (3.39--3.46).}}{4}{figure.3}\protected@file@percent }
+\newlabel{fig:utmos}{{3}{4}{UTMOS quality scores for BAS (left) and SGS (right) across exaggeration and CFG parameter combinations. BAS at low exaggeration achieves the highest perceived quality (3.39--3.46)}{figure.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-B}}Intelligibility}{4}{subsection.4.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-C}}Speech Quality}{4}{subsection.4.3}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {III}{\ignorespaces Objective evaluation metrics for Romanian TTS (mean $\pm $ std). Best intelligibility per metric is in \textbf  {bold}.}}{5}{table.3}\protected@file@percent }
+\newlabel{tab:metrics}{{III}{5}{Objective evaluation metrics for Romanian TTS (mean $\pm $ std). Best intelligibility per metric is in \textbf {bold}}{table.3}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Speaker cosine similarity across conditions. SGS (orange) consistently achieves higher fidelity than BAS (blue). Higher exaggeration improves speaker preservation for both speakers.}}{5}{figure.4}\protected@file@percent }
+\newlabel{fig:speaker_sim}{{4}{5}{Speaker cosine similarity across conditions. SGS (orange) consistently achieves higher fidelity than BAS (blue). Higher exaggeration improves speaker preservation for both speakers}{figure.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-D}}Speaker Fidelity}{5}{subsection.4.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-E}}Speaker-Level Comparison}{5}{subsection.4.5}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {IV}{\ignorespaces Speaker-level metrics (mean $\pm $ std, across all conditions).}}{5}{table.4}\protected@file@percent }
+\newlabel{tab:speaker_comparison}{{IV}{5}{Speaker-level metrics (mean $\pm $ std, across all conditions)}{table.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-F}}Parameter Interaction Analysis}{5}{subsection.4.6}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {V}{\ignorespaces Main effects of exaggeration and CFG on each metric (averaged over the other factor and both speakers).}}{5}{table.5}\protected@file@percent }
+\newlabel{tab:maineffects}{{V}{5}{Main effects of exaggeration and CFG on each metric (averaged over the other factor and both speakers)}{table.5}{}}
+\citation{mms}
+\citation{f5tts_ro}
+\citation{f5tts_ro}
+\citation{align2speak}
+\citation{f5tts_ro}
+\bibcite{valle}{1}
+\bibcite{seedtts}{2}
+\bibcite{f5tts}{3}
+\bibcite{cosyvoice}{4}
+\bibcite{chatterbox}{5}
+\bibcite{fastpitch_ro}{6}
+\bibcite{f5tts_ro}{7}
+\bibcite{mms}{8}
+\bibcite{align2speak}{9}
+\bibcite{swara}{10}
+\bibcite{utmos}{11}
+\bibcite{romanian_asr}{12}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-G}}Comparison with Prior Work}{6}{subsection.4.7}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {VI}{\ignorespaces Comparison with Romanian TTS prior work. (--) denotes capability not supported.}}{6}{table.6}\protected@file@percent }
+\newlabel{tab:priorwork}{{VI}{6}{Comparison with Romanian TTS prior work. (--) denotes capability not supported}{table.6}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {V}Conclusions and Future Work}{6}{section.5}\protected@file@percent }
+\newlabel{sec:conclusion}{{V}{6}{Conclusions and Future Work}{section.5}{}}
+\@writefile{toc}{\contentsline {section}{References}{6}{section*.1}\protected@file@percent }
+\gdef \@abspage@last{7}

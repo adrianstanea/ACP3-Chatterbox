@@ -1,0 +1,16 @@
+{
+  "metadata": {
+    "total_epochs": 39.03903903903904,
+    "global_steps": 13000
+  },
+  "convergence": {
+    "training_loss_initial": 5.9826,
+    "training_loss_final": 0.1212,
+    "training_loss_min": 0.111,
+    "training_loss_max": 5.9826,
+    "num_logs": 39
+  },
+  "best_metrics": {
+    "best_model_checkpoint": null
+  }
+}

@@ -173,9 +173,19 @@ def plot_ablation_all_conditions_grouped(
         "sgs_exag0.3_cfg0.3", "sgs_exag0.3_cfg0.5", "sgs_exag0.7_cfg0.3", "sgs_exag0.7_cfg0.5",
     ]
     
-    # Color scheme: BAS = blue shades, SGS = orange shades
-    colors = ["#1f77b4", "#4587d0", "#2ca02c", "#4eb840",  # BAS conditions
-              "#ff7f0e", "#ffaa40", "#d62728", "#e85555"]  # SGS conditions
+    # Color scheme: BAS (blue) vs SGS (orange)
+    # Lighter for exag0.3, Darker for exag0.7
+    # Slight variation for cfg0.3 vs cfg0.5
+    colors = [
+        "#6baed6",  # BAS exag0.3 cfg0.3 - light blue
+        "#3182bd",  # BAS exag0.3 cfg0.5 - medium blue
+        "#08519c",  # BAS exag0.7 cfg0.3 - dark blue
+        "#08306b",  # BAS exag0.7 cfg0.5 - very dark blue
+        "#fd8d3c",  # SGS exag0.3 cfg0.3 - light orange
+        "#e6550d",  # SGS exag0.3 cfg0.5 - medium orange
+        "#a63603",  # SGS exag0.7 cfg0.3 - dark orange
+        "#7f2704",  # SGS exag0.7 cfg0.5 - very dark orange
+    ]
     
     # Figure 1: CER and WER (full scale)
     fig1, axes1 = plt.subplots(1, 2, figsize=(14, 5))
@@ -187,7 +197,11 @@ def plot_ablation_all_conditions_grouped(
         for condition in condition_order:
             if "by_condition" in ablation and condition in ablation["by_condition"]:
                 values.append(ablation["by_condition"][condition].get(metric, 0))
-                label = condition.replace("bas_", "B").replace("sgs_", "S").replace("exag", "E").replace("cfg", "C")
+                # Create meaningful label: "BAS-E0.3-C0.3" format
+                synth = "BAS" if condition.startswith("bas") else "SGS"
+                exag = condition.split("exag")[1][0:3]  # Get "0.3" or "0.7"
+                cfg = condition.split("cfg")[1][0:3]    # Get "0.3" or "0.5"
+                label = f"{synth}\nE{exag}\nC{cfg}"
                 labels.append(label)
         
         if values:
@@ -199,12 +213,19 @@ def plot_ablation_all_conditions_grouped(
             ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=9)
             ax.grid(True, alpha=0.3, axis="y")
             
+            # Add legend explaining color scheme
             from matplotlib.patches import Patch
             legend_elements = [
-                Patch(facecolor="#1f77b4", alpha=0.7, edgecolor="black", label="BAS"),
-                Patch(facecolor="#ff7f0e", alpha=0.7, edgecolor="black", label="SGS"),
+                Patch(facecolor="#6baed6", edgecolor="black", label="BAS Exag0.3 Cfg0.3"),
+                Patch(facecolor="#3182bd", edgecolor="black", label="BAS Exag0.3 Cfg0.5"),
+                Patch(facecolor="#08519c", edgecolor="black", label="BAS Exag0.7 Cfg0.3"),
+                Patch(facecolor="#08306b", edgecolor="black", label="BAS Exag0.7 Cfg0.5"),
+                Patch(facecolor="#fd8d3c", edgecolor="black", label="SGS Exag0.3 Cfg0.3"),
+                Patch(facecolor="#e6550d", edgecolor="black", label="SGS Exag0.3 Cfg0.5"),
+                Patch(facecolor="#a63603", edgecolor="black", label="SGS Exag0.7 Cfg0.3"),
+                Patch(facecolor="#7f2704", edgecolor="black", label="SGS Exag0.7 Cfg0.5"),
             ]
-            ax.legend(handles=legend_elements, loc="upper right", fontsize=9)
+            ax.legend(handles=legend_elements, loc="upper left", fontsize=7, ncol=2, framealpha=0.95)
     
     plt.tight_layout()
     output_path1 = output_dir / "ablation_v1_cer_wer.png"
@@ -220,7 +241,10 @@ def plot_ablation_all_conditions_grouped(
     for condition in condition_order:
         if "by_condition" in ablation and condition in ablation["by_condition"]:
             values.append(ablation["by_condition"][condition].get(metric, 0))
-            label = condition.replace("bas_", "B").replace("sgs_", "S").replace("exag", "E").replace("cfg", "C")
+            synth = "BAS" if condition.startswith("bas") else "SGS"
+            exag = condition.split("exag")[1][0:3]
+            cfg = condition.split("cfg")[1][0:3]
+            label = f"{synth}\nE{exag}\nC{cfg}"
             labels.append(label)
     
     if values:
@@ -241,10 +265,16 @@ def plot_ablation_all_conditions_grouped(
         
         from matplotlib.patches import Patch
         legend_elements = [
-            Patch(facecolor="#1f77b4", alpha=0.7, edgecolor="black", label="BAS"),
-            Patch(facecolor="#ff7f0e", alpha=0.7, edgecolor="black", label="SGS"),
+            Patch(facecolor="#6baed6", edgecolor="black", label="BAS Exag0.3 Cfg0.3"),
+            Patch(facecolor="#3182bd", edgecolor="black", label="BAS Exag0.3 Cfg0.5"),
+            Patch(facecolor="#08519c", edgecolor="black", label="BAS Exag0.7 Cfg0.3"),
+            Patch(facecolor="#08306b", edgecolor="black", label="BAS Exag0.7 Cfg0.5"),
+            Patch(facecolor="#fd8d3c", edgecolor="black", label="SGS Exag0.3 Cfg0.3"),
+            Patch(facecolor="#e6550d", edgecolor="black", label="SGS Exag0.3 Cfg0.5"),
+            Patch(facecolor="#a63603", edgecolor="black", label="SGS Exag0.7 Cfg0.3"),
+            Patch(facecolor="#7f2704", edgecolor="black", label="SGS Exag0.7 Cfg0.5"),
         ]
-        ax.legend(handles=legend_elements, loc="upper right", fontsize=9)
+        ax.legend(handles=legend_elements, loc="upper left", fontsize=7, ncol=2, framealpha=0.95)
     
     plt.tight_layout()
     output_path2 = output_dir / "ablation_v1_utmos.png"
@@ -260,7 +290,10 @@ def plot_ablation_all_conditions_grouped(
     for condition in condition_order:
         if "by_condition" in ablation and condition in ablation["by_condition"]:
             values.append(ablation["by_condition"][condition].get(metric, 0))
-            label = condition.replace("bas_", "B").replace("sgs_", "S").replace("exag", "E").replace("cfg", "C")
+            synth = "BAS" if condition.startswith("bas") else "SGS"
+            exag = condition.split("exag")[1][0:3]
+            cfg = condition.split("cfg")[1][0:3]
+            label = f"{synth}\nE{exag}\nC{cfg}"
             labels.append(label)
     
     if values:
@@ -281,10 +314,16 @@ def plot_ablation_all_conditions_grouped(
         
         from matplotlib.patches import Patch
         legend_elements = [
-            Patch(facecolor="#1f77b4", alpha=0.7, edgecolor="black", label="BAS"),
-            Patch(facecolor="#ff7f0e", alpha=0.7, edgecolor="black", label="SGS"),
+            Patch(facecolor="#6baed6", edgecolor="black", label="BAS Exag0.3 Cfg0.3"),
+            Patch(facecolor="#3182bd", edgecolor="black", label="BAS Exag0.3 Cfg0.5"),
+            Patch(facecolor="#08519c", edgecolor="black", label="BAS Exag0.7 Cfg0.3"),
+            Patch(facecolor="#08306b", edgecolor="black", label="BAS Exag0.7 Cfg0.5"),
+            Patch(facecolor="#fd8d3c", edgecolor="black", label="SGS Exag0.3 Cfg0.3"),
+            Patch(facecolor="#e6550d", edgecolor="black", label="SGS Exag0.3 Cfg0.5"),
+            Patch(facecolor="#a63603", edgecolor="black", label="SGS Exag0.7 Cfg0.3"),
+            Patch(facecolor="#7f2704", edgecolor="black", label="SGS Exag0.7 Cfg0.5"),
         ]
-        ax.legend(handles=legend_elements, loc="upper right", fontsize=9)
+        ax.legend(handles=legend_elements, loc="upper left", fontsize=7, ncol=2, framealpha=0.95)
     
     plt.tight_layout()
     output_path3 = output_dir / "ablation_v1_speaker_similarity.png"
