@@ -20,13 +20,12 @@
 % ============================================================
 \begin{document}
 
-\title{Adapting the Chatterbox Text-to-Speech Architecture\\
-       to Romanian via Phoneme-Level Preprocessing}
+\title{Zero-Shot Romanian TTS via Phoneme-Level Fine-Tuning of Chatterbox Multilingual}
 
-\author{\IEEEauthorblockN{Adrian Stanea}
-\IEEEauthorblockA{%
-  \textit{[Institution]}\\
-  \{email\}}}
+\author{\IEEEauthorblockN{Adrian-Bogdan STÂNEA}
+\IEEEauthorblockA{
+  \textit{Technical University of Cluj-Napoca, Romania}\\
+  \{adriannstanea1@gmail.com\}}}
 
 \maketitle
 
@@ -36,8 +35,8 @@ Romanian remains unsupported in most state-of-the-art (SOTA)
 zero-shot text-to-speech (TTS) systems, including Chatterbox —
 a 0.5-billion-parameter, MIT-licensed model based on a Llama
 transformer backbone with conditional flow matching (CFM).
-We present the first adaptation of the Chatterbox architecture to
-a new language, using Romanian as the target.
+We present the first fine-tuning of the Chatterbox Multilingual
+architecture for Romanian.
 Our approach fine-tunes only the T3 text-to-token transformer on
 the SWARA 1.0 corpus (21,304 utterances, $\sim$21 hours, 18 speakers),
 while leaving the voice encoder and S3 speech generator frozen.
@@ -119,8 +118,8 @@ F5-TTS: it uses a BPE grapheme tokeniser with 2,454 tokens (not
 character padding), and processes speech through a two-stage T3/S3
 pipeline rather than a single DiT backbone.
 Adapting Chatterbox thus poses distinct challenges — and this work
-constitutes the first published adaptation of Chatterbox to any new
-language.
+constitutes the first published fine-tuning of the Chatterbox
+Multilingual variant for Romanian.
 
 Our contributions are:
 \begin{enumerate}
@@ -176,7 +175,7 @@ while keeping the entire model frozen, with a key finding that
 full fine-tuning yielded better WER ($3.62\%$) but substantially
 lower speaker similarity ($0.79$) compared to the adapter ($5.27\%$,
 $0.90$), highlighting the inherent trade-off in low-resource adaptation.
-MMS-TTS~\cite{mms} scaled VITS-based synthesis to 1,100 languages
+MMS-TTS~\cite{mms} scales VITS-based synthesis to 1,100 languages
 including Romanian, but operates as a single-speaker system.
 Align2Speak~\cite{align2speak} proposed a GRPO-based framework that
 uses ASR-derived reward signals to align multilingual TTS models to
@@ -229,8 +228,8 @@ increased mode-seeking behaviour.
 
 \subsection{The Chatterbox Architecture}
 
-Chatterbox processes text-to-speech synthesis in four stages, as
-illustrated conceptually below.
+Chatterbox processes text-to-speech synthesis in four stages,
+summarised as follows.
 
 \textbf{Stage 1 — EnTokenizer.}
 Input text is converted to a sequence of integer token IDs by a
@@ -254,7 +253,7 @@ via CFM, additionally conditioned on the prompt mel-spectrogram and
 a speaker embedding.
 The CFM backbone is an OT-flow-matching model with a Llama
 transformer as the vector-field estimator.
-Being frozen, S3Gen retains its full pretrained capacity for
+Because S3Gen is frozen, it retains its full pretrained capacity for
 high-fidelity acoustic generation.
 
 \textbf{Stage 4 — Vocoder.}
@@ -275,9 +274,11 @@ Two parameters are exposed at inference time:
 \subsection{Evaluation Metrics}
 
 \textbf{Intelligibility — CER and WER.}
-Synthesised audio is transcribed using a Romanian ASR
-model~\cite{romanian_asr}; the transcript is compared against the
-reference text with standard dynamic-programming alignment.
+Synthesised audio is transcribed using OpenAI Whisper
+medium~\cite{whisper}, configured with \texttt{language=``ro''},
+\texttt{beam\_size=5}, and \texttt{best\_of=5}; the transcript is
+compared against the reference text with standard
+dynamic-programming alignment.
 CER operates at the character level; WER at the word level.
 Both metrics are lower-is-better.
 
@@ -384,17 +385,19 @@ This preserves the full 2,454-token vocabulary without any
 mean-initialised embeddings, retaining the discriminative quality of
 all pretrained representations.
 
-However, the initial training run at a learning rate that was too
-high produced unstable outputs — the model generated unintelligible
-speech after a limited number of training steps, indicating that the
-T3 transformer is sensitive to learning-rate magnitude during
-fine-tuning.
+However, the initial training run at the same learning rate used in
+Iteration~1 ($1\times10^{-5}$, batch size~32) produced unstable
+outputs — the model generated unintelligible speech after a limited
+number of training steps, indicating that the T3 transformer is
+sensitive to learning-rate magnitude during fine-tuning, independently
+of the vocabulary configuration.
 
 \subsubsection{Iteration 3 — Stabilised Phoneme Mapping (Final Configuration)}
 
 The phoneme-level preprocessing from Iteration 2 was retained; the
-primary change was a conservative reduction of the learning rate and
-an increase in batch size.
+primary changes were a halving of the learning rate from
+$1\times10^{-5}$ to $5\times10^{-6}$ and a reduction of the batch
+size from 32 to 16.
 Table~\ref{tab:iterations} summarises the three iterations.
 
 \begin{table}[h]
@@ -408,8 +411,8 @@ Table~\ref{tab:iterations} summarises the three iterations.
 Vocabulary size & 2,459 & 2,454 & 2,454 \\
 Preprocessing & None & Phoneme & Phoneme \\
 Embedding init & Mean & Pretrained & Pretrained \\
-Learning rate & high & too high & $5\times10^{-6}$ \\
-Batch size & small & small & 16 \\
+Learning rate & $1\times10^{-5}$ & $1\times10^{-5}$ & $5\times10^{-6}$ \\
+Batch size & 32 & 32 & 16 \\
 Outcome & Collapse & Unstable & Stable \\
 \bottomrule
 \end{tabular}
@@ -457,8 +460,9 @@ $\times$ CFG scale $\in \{0.3, 0.5\}$, yielding eight experimental
 conditions.
 For each condition, 50 test utterances were synthesised using a
 3-second speaker reference clip, producing 400 total samples.
-CER and WER were computed via transcription with a Romanian
-ASR model~\cite{romanian_asr}.
+CER and WER were computed via transcription with OpenAI Whisper
+medium~\cite{whisper} (\texttt{language=``ro''}, \texttt{beam\_size=5},
+\texttt{best\_of=5}).
 UTMOS~\cite{utmos} and speaker cosine similarity were computed
 per sample.
 All statistics are reported as mean $\pm$ standard deviation over
@@ -474,7 +478,7 @@ the 50-sample per-condition pool.
 \centering
 \includegraphics[width=\columnwidth]{training_dynamics/loss_curves.png}
 \caption{Training loss over 13,000 steps ($\approx$39 epochs).
-  The loss decreases monotonically from 5.98 to 0.12, with rapid
+  The loss decreases monotonically from 5.98 to 0.11, with rapid
   initial descent and gradual plateau after step $\sim$10,000.}
 \label{fig:loss}
 \end{figure}
@@ -673,7 +677,7 @@ CFG  & 0.5 & 0.149 & 0.368 & 3.189 & 0.845 \\
 \end{table}
 
 The exaggeration parameter has the strongest effect on intelligibility:
-increasing exaggeration from 0.3 to 0.7 raises mean CER by $\approx1.6$ pp
+increasing exaggeration from 0.3 to 0.7 raises mean CER by $\approx2.0$ pp
 and WER by $\approx5.1$ pp, while reducing UTMOS by $\approx0.12$ points.
 In contrast, speaker similarity \emph{increases} with exaggeration
 ($+0.02$), indicating the parameter simultaneously trades intelligibility
@@ -742,11 +746,11 @@ with prior work.
 \section{Conclusions and Future Work}
 \label{sec:conclusion}
 
-We have presented the first adaptation of the Chatterbox TTS
-architecture to a new language, demonstrating that phoneme-level
-text preprocessing enables stable fine-tuning of a BPE-tokenised
-Llama-based flow-matching model on Romanian without any modification
-to the model architecture or vocabulary.
+We have presented the first fine-tuning of the Chatterbox Multilingual
+architecture for Romanian, demonstrating that phoneme-level text
+preprocessing enables stable fine-tuning of a BPE-tokenised
+Llama-based flow-matching model without any modification to the model
+architecture or vocabulary.
 The central finding is that mean-initialised vocabulary extension
 causes posterior collapse — a failure that is language-agnostic and
 reproducible — while phoneme mapping to existing tokens fully avoids
@@ -763,18 +767,15 @@ All evaluated configurations produce intelligible Romanian speech
 with speaker similarity above $0.80$ for unseen holdout speakers.
 
 Several directions remain for future work.
-First, the training loss plateau after step 10,000 suggests continued
-improvement from lower learning rates and extended training duration.
-Second, integrating reinforcement learning with a Romanian ASR
-reward signal — following the Align2Speak~\cite{align2speak} and
-F5R-TTS frameworks — could directly optimise intelligibility beyond
-what supervised fine-tuning alone achieves.
-Third, adapter-based hybrid approaches (following F5-TTS-RO~\cite{f5tts_ro})
-could potentially combine the fidelity preservation of frozen modules
-with the phoneme-mapping strategy demonstrated here.
+The training loss plateau after step 10,000 suggests continued
+improvement from lower learning rates and extended training.
+Integrating reinforcement learning with a Romanian ASR reward signal
+could directly optimise intelligibility beyond supervised fine-tuning.
+Adapter-based hybrid approaches could combine fidelity preservation
+of frozen modules with the phoneme-mapping strategy demonstrated here.
 Finally, subjective evaluation with native Romanian listeners and
-extension to spontaneous and expressive speech corpora remain
-important steps toward a production-grade Romanian TTS system.
+extension to spontaneous speech corpora remain important steps toward
+a production-grade Romanian TTS system.
 
 % ============================================================
 \balance
@@ -845,11 +846,11 @@ and H.~Saruwatari,
 ``UTMOS: UTokyo-SaruLab System for VoiceMOS Challenge 2022,''
 in \textit{Proc. Interspeech}, pp.\ 4521--4525, 2022.
 
-\bibitem{romanian_asr}
-A.~P\^{i}rlogeanu, B.~Sas, V.~Rachit\c{a}, T.-M.~Micu,
-and M.~Dascalu,
-``Open Source State-Of-the-Art Solution for Romanian Speech Recognition,''
-\textit{arXiv preprint arXiv:2511.03361}, 2025.
+\bibitem{whisper}
+A.~Radford, J.~W.~Kim, T.~Xu, G.~Brockman, C.~McLeavey,
+and I.~Sutskever,
+``Robust Speech Recognition via Large-Scale Weak Supervision,''
+in \textit{Proc. ICML}, pp.\ 28492--28518, 2023.
 
 \end{thebibliography}
 
